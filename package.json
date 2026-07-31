@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "backfill": "tsx scripts/backfill.ts",
     "capture-fixtures": "tsx scripts/capture-fixtures.ts",
-    "db:push": "prisma db push"
+    "db:push": "node scripts/db-push.mjs",
+    "db:push:dry": "node scripts/db-push.mjs --dry-run"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
