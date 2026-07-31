@@ -974,7 +974,9 @@ describe("createFloridayClient", () => {
   });
 
   it("gives up after the maximum number of attempts", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(new Response("boom", { status: 500 }));
+    // A fresh Response per call, because a body can only be read once and real fetch
+    // never hands back the same object twice.
+    const fetchImpl = vi.fn(async () => new Response("boom", { status: 500 }));
     const client = createFloridayClient({ ...baseOptions, fetchImpl, maxAttempts: 3 });
 
     await expect(client.getJson("/thing")).rejects.toThrow(/500/);
@@ -982,13 +984,45 @@ describe("createFloridayClient", () => {
   });
 
   it("does not retry a 403, because that signals a permission problem", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
+    const fetchImpl = vi.fn(async () =>
       jsonResponse({ title: "There are no connected suppliers." }, 403),
     );
     const client = createFloridayClient({ ...baseOptions, fetchImpl });
 
     await expect(client.getJson("/thing")).rejects.toThrow(/no connected suppliers/);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the rate limiter before every attempt", async () => {
+    const acquire = vi.fn(async () => {});
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response("slow down", { status: 429 }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = createFloridayClient({ ...baseOptions, rateLimiter: { acquire }, fetchImpl });
+
+    await client.getJson("/thing");
+    expect(acquire).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops retrying a 401 after the token refresh also fails", async () => {
+    const invalidate = vi.fn();
+    const fetchImpl = vi.fn(async () => new Response("nope", { status: 401 }));
+    const client = createFloridayClient({
+      ...baseOptions,
+      tokenCache: { getToken: async () => "test-token", invalidate },
+      fetchImpl,
+    });
+
+    await expect(client.getJson("/thing")).rejects.toThrow(/401/);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a diagnosable error when a 200 carries invalid json", async () => {
+    const fetchImpl = vi.fn(async () => new Response("<html>oops</html>", { status: 200 }));
+    const client = createFloridayClient({ ...baseOptions, fetchImpl });
+
+    await expect(client.getJson("/thing")).rejects.toThrow(/invalid json.*\/thing/i);
   });
 });
 ```
@@ -1035,9 +1069,15 @@ export function createFloridayClient(options: FloridayClientOptions): FloridayCl
     sleep = defaultSleep,
   } = options;
 
+  /** Reads the body once, for an error we are about to throw. */
+  async function describe(response: Response): Promise<string> {
+    const body = await response.text();
+    return `${response.status} ${body.slice(0, 300)}`;
+  }
+
   async function getJson<T>(path: string): Promise<T> {
     let refreshedToken = false;
-    let lastError = "";
+    let lastFailure: Response | null = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       await rateLimiter.acquire();
@@ -1051,10 +1091,18 @@ export function createFloridayClient(options: FloridayClientOptions): FloridayCl
         },
       });
 
-      if (response.ok) return (await response.json()) as T;
-
-      const body = await response.text();
-      lastError = `${response.status} ${body.slice(0, 300)}`;
+      if (response.ok) {
+        // Not response.json(): a proxy or error page returning HTML with a 200 would
+        // otherwise surface as a bare SyntaxError with no clue which call produced it.
+        const text = await response.text();
+        try {
+          return JSON.parse(text) as T;
+        } catch {
+          throw new Error(
+            `Floriday returned invalid json: GET ${path} -> ${text.slice(0, 300)}`,
+          );
+        }
+      }
 
       // A stale token is worth exactly one retry; beyond that it is a real problem.
       if (response.status === 401 && !refreshedToken) {
@@ -1066,15 +1114,22 @@ export function createFloridayClient(options: FloridayClientOptions): FloridayCl
       // 403 means the organisation lacks permission. Retrying cannot fix that, and
       // silently looping would hide a change on the Floriday side.
       if (!RETRYABLE_STATUSES.has(response.status)) {
-        throw new Error(`Floriday request failed: GET ${path} -> ${lastError}`);
+        throw new Error(`Floriday request failed: GET ${path} -> ${await describe(response)}`);
       }
+
+      // Keep the response, do not read it yet: attempts that end up succeeding should
+      // not pay for reading a body nobody will look at.
+      lastFailure = response;
 
       if (attempt < maxAttempts) {
         await sleep(Math.min(2 ** (attempt - 1) * 500, 8000));
       }
     }
 
-    throw new Error(`Floriday request failed after ${maxAttempts} attempts: GET ${path} -> ${lastError}`);
+    const detail = lastFailure ? await describe(lastFailure) : "no response";
+    throw new Error(
+      `Floriday request failed after ${maxAttempts} attempts: GET ${path} -> ${detail}`,
+    );
   }
 
   return { getJson };
