@@ -109,4 +109,35 @@ describe("createFloridayClient", () => {
 
     await expect(client.getJson("/thing")).rejects.toThrow(/invalid json.*\/thing/i);
   });
+
+  // fetch throws instead of returning a response when the connection itself fails. A real
+  // backfill died on ECONNRESET after twelve minutes because this escaped the retry loop.
+  it("retries a dropped connection and then succeeds", async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = createFloridayClient({ ...baseOptions, fetchImpl });
+
+    await expect(client.getJson("/thing")).resolves.toEqual({ ok: true });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on a connection that keeps failing, naming the cause", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new TypeError("read ECONNRESET"));
+    const client = createFloridayClient({ ...baseOptions, fetchImpl, maxAttempts: 3 });
+
+    await expect(client.getJson("/thing")).rejects.toThrow(/ECONNRESET/);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("still asks the rate limiter before each retried connection attempt", async () => {
+    const acquire = vi.fn(async () => {});
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const client = createFloridayClient({ ...baseOptions, rateLimiter: { acquire }, fetchImpl });
+
+    await client.getJson("/thing");
+    expect(acquire).toHaveBeenCalledTimes(2);
+  });
 });

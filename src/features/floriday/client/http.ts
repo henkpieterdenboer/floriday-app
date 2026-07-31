@@ -39,18 +39,39 @@ export function createFloridayClient(options: FloridayClientOptions): FloridayCl
   async function getJson<T>(path: string): Promise<T> {
     let refreshedToken = false;
     let lastFailure: Response | null = null;
+    let lastNetworkError: string | null = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       await rateLimiter.acquire();
 
       const token = await tokenCache.getToken();
-      const response = await fetchImpl(`${baseUrl}${path}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Api-Key": apiKey,
-          Accept: "application/json",
-        },
-      });
+
+      let response: Response;
+      try {
+        response = await fetchImpl(`${baseUrl}${path}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Api-Key": apiKey,
+            Accept: "application/json",
+          },
+        });
+      } catch (error: unknown) {
+        // fetch throws rather than returning a response when the connection itself
+        // fails: a reset socket, a DNS blip, a dropped TLS handshake. Over a backfill
+        // that makes hundreds of consecutive calls this is not exotic - it killed a run
+        // at ECONNRESET after twelve minutes. Treat it like a 5xx: worth retrying,
+        // because the request never reached Floriday and nothing was consumed.
+        lastNetworkError = error instanceof Error ? error.message : String(error);
+        lastFailure = null;
+
+        if (attempt < maxAttempts) {
+          await sleep(Math.min(2 ** (attempt - 1) * 500, 8000));
+          continue;
+        }
+        break;
+      }
+
+      lastNetworkError = null;
 
       if (response.ok) {
         // Not response.json(): a proxy or error page returning HTML with a 200 would
@@ -87,7 +108,9 @@ export function createFloridayClient(options: FloridayClientOptions): FloridayCl
       }
     }
 
-    const detail = lastFailure ? await describe(lastFailure) : "no response";
+    const detail = lastFailure
+      ? await describe(lastFailure)
+      : (lastNetworkError ?? "no response");
     throw new Error(
       `Floriday request failed after ${maxAttempts} attempts: GET ${path} -> ${detail}`,
     );
