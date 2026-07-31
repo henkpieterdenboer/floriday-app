@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { envSchema } from "@/lib/env";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { envSchema, getEnv, resetEnvCache } from "@/lib/env";
 
 const valid = {
   DATABASE_URL: "postgresql://user:pass@host/db?sslmode=require",
@@ -26,5 +26,50 @@ describe("envSchema", () => {
   it("rejects an api base url that is not a url", () => {
     expect(() => envSchema.parse({ ...valid, FLORIDAY_CUSTOMERS_API_BASE_URL: "nope" }))
       .toThrow();
+  });
+});
+
+describe("getEnv", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    resetEnvCache();
+    process.env = { ...process.env, ...valid };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it("returns a parsed configuration when process.env is complete", () => {
+    const result = getEnv();
+    expect(result.FLORIDAY_CUSTOMERS_API_KEY).toBe("key");
+  });
+
+  it("throws naming the offending field when one is missing", () => {
+    delete process.env.CRON_SECRET;
+    expect(() => getEnv()).toThrow(/CRON_SECRET/);
+  });
+
+  it("throws naming the field and the reason when one is malformed", () => {
+    process.env = { ...process.env, FLORIDAY_TOKEN_URL: "not-a-url" };
+    expect(() => getEnv()).toThrow(/FLORIDAY_TOKEN_URL/);
+    expect(() => getEnv()).toThrow(/url/i);
+  });
+
+  it("returns the same cached object on a second call", () => {
+    const first = getEnv();
+    const second = getEnv();
+    expect(second).toBe(first);
+  });
+
+  it("picks up a changed environment after resetEnvCache", () => {
+    const first = getEnv();
+    expect(first.CRON_SECRET).toBe("cron");
+
+    resetEnvCache();
+    process.env = { ...process.env, CRON_SECRET: "changed" };
+    const second = getEnv();
+    expect(second.CRON_SECRET).toBe("changed");
   });
 });

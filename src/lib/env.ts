@@ -21,10 +21,17 @@ export function getEnv(): Env {
 
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
-    const missing = parsed.error.issues.map((issue) => issue.path.join(".")).join(", ");
-    throw new Error(`Invalid environment configuration: ${missing}. See .env.example.`);
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join(", ");
+    throw new Error(`Invalid environment configuration: ${details}. See .env.example.`);
   }
 
   cached = parsed.data;
   return cached;
+}
+
+/** Clears the cached environment. Exists for tests so each test can exercise a fresh configuration. */
+export function resetEnvCache(): void {
+  cached = null;
 }
