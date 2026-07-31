@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { SupplyLineRow } from "@/features/floriday/mappers/supply-line";
 import { selectChangedLines } from "@/features/floriday/sync/changed-lines";
+import { dedupeSupplyLines } from "@/features/floriday/sync/dedupe-lines";
 
 export interface WriteResult {
   rowsProcessed: number;
@@ -103,6 +104,11 @@ function upsertSupplyLinesSql(rows: readonly SupplyLineRow[], observedAt: Date):
  * either both the current-state table and the version history reflect this page, or
  * neither does. The read that decides which lines changed happens beforehand, outside the
  * transaction, since it only needs to be consistent with itself, not with the write.
+ *
+ * Deduplicated before anything else touches it (see dedupeSupplyLines): a page is not
+ * expected to contain the same supplyLineId twice, but that is an assumption about
+ * Floriday's internals, not a published contract, and rowsProcessed reflects the row count
+ * actually written, after deduplication.
  */
 export async function writeSupplyPage(
   rows: readonly SupplyLineRow[],
@@ -110,7 +116,8 @@ export async function writeSupplyPage(
 ): Promise<WriteResult> {
   if (rows.length === 0) return { rowsProcessed: 0, versionsAdded: 0 };
 
-  const ids = rows.map((row) => row.supplyLineId);
+  const deduped = dedupeSupplyLines(rows);
+  const ids = deduped.map((row) => row.supplyLineId);
 
   const stored = await prisma.supplyLine.findMany({ where: { supplyLineId: { in: ids } } });
 
@@ -126,12 +133,12 @@ export async function writeSupplyPage(
     }),
   );
 
-  const changed = selectChangedLines(rows, existing);
+  const changed = selectChangedLines(deduped, existing);
 
   await prisma.$transaction(async (tx) => {
     // SupplyLineVersion has a foreign key to SupplyLine, so on a line's first-ever
     // observation the SupplyLine row must exist before its version row can be inserted.
-    await tx.$executeRaw(upsertSupplyLinesSql(rows, observedAt));
+    await tx.$executeRaw(upsertSupplyLinesSql(deduped, observedAt));
 
     if (changed.length > 0) {
       await tx.supplyLineVersion.createMany({
@@ -141,5 +148,5 @@ export async function writeSupplyPage(
     }
   }, { timeout: 15_000 });
 
-  return { rowsProcessed: rows.length, versionsAdded: changed.length };
+  return { rowsProcessed: deduped.length, versionsAdded: changed.length };
 }

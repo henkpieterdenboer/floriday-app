@@ -158,4 +158,33 @@ describe("writeSupplyPage", () => {
       }),
     ).toBe(1);
   });
+
+  // Floriday's sync endpoint is expected to return each id at most once per page, but that
+  // is an assumption, not a published contract. Without deduplication this would reach the
+  // bulk upsert statement and throw "ON CONFLICT DO UPDATE command cannot affect row a
+  // second time", aborting an in-progress backfill outright.
+  it("collapses a duplicate id within a page, keeping the entry with the higher sequence number", async () => {
+    const lower = rows[0];
+    const higher = {
+      ...rows[0],
+      sequenceNumber: rows[0].sequenceNumber + 1n,
+      numberOfPieces: rows[0].numberOfPieces - 40,
+    };
+    const pageWithDuplicate = [lower, higher, ...rows.slice(1)];
+
+    const result = await writeSupplyPage(pageWithDuplicate, new Date());
+
+    expect(result.rowsProcessed).toBe(rows.length);
+    expect(result.versionsAdded).toBe(rows.length);
+
+    const stored = await prisma.supplyLine.findUniqueOrThrow({
+      where: { supplyLineId: rows[0].supplyLineId },
+    });
+    expect(stored.numberOfPieces).toBe(higher.numberOfPieces);
+    expect(stored.sequenceNumber).toBe(higher.sequenceNumber);
+
+    expect(
+      await prisma.supplyLineVersion.count({ where: { supplyLineId: rows[0].supplyLineId } }),
+    ).toBe(1);
+  });
 });
