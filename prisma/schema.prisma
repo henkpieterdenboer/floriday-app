@@ -1,0 +1,174 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum SupplyStatus {
+  AVAILABLE
+  UNAVAILABLE
+}
+
+enum AuctionLocation {
+  AALSMEER
+  NAALDWIJK
+  RIJNSBURG
+  EELDE
+  PLANTION
+  RHEINMAAS
+  DIGITAL
+}
+
+enum SyncTrigger {
+  BACKFILL
+  CRON
+  MANUAL
+}
+
+enum SyncStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model SupplyLine {
+  supplyLineId           String          @id @db.Uuid
+  status                 SupplyStatus
+  tradeItemId            String          @db.Uuid
+  tradeItemVersion       Int?
+  pricePerPiece          Decimal         @db.Decimal(12, 4)
+  currency               String          @db.VarChar(3)
+  numberOfPieces         Int
+  deliveryNoteReference  String?
+  deliveryNoteCode       String?
+  deliveryNoteLetter     String?
+  piecesPerPackage       Int?
+  vbnPackageCode         Int?
+  customPackageId        String?         @db.Uuid
+  packagesPerLayer       Int?
+  layersPerLoadCarrier   Int?
+  loadCarrier            String?
+  tradePeriodStart       DateTime        @db.Timestamptz
+  tradePeriodEnd         DateTime        @db.Timestamptz
+  supplierOrganizationId String          @db.Uuid
+  sequenceNumber         BigInt
+  creationDateTime       DateTime        @db.Timestamptz
+  lastModifiedDateTime   DateTime?       @db.Timestamptz
+  auctionDate            DateTime        @db.Date
+  initialAuctionLocation AuctionLocation
+  photoUrl               String?
+
+  firstSeenAt            DateTime        @db.Timestamptz
+  lastSeenAt             DateTime        @db.Timestamptz
+
+  versions               SupplyLineVersion[]
+
+  @@index([auctionDate, initialAuctionLocation])
+  @@index([supplierOrganizationId])
+  @@index([tradeItemId])
+  @@index([status])
+  @@index([sequenceNumber])
+}
+
+model SupplyLineVersion {
+  id                     BigInt          @id @default(autoincrement())
+  supplyLineId           String          @db.Uuid
+  sequenceNumber         BigInt
+  observedAt             DateTime        @db.Timestamptz
+
+  status                 SupplyStatus
+  tradeItemId            String          @db.Uuid
+  tradeItemVersion       Int?
+  pricePerPiece          Decimal         @db.Decimal(12, 4)
+  currency               String          @db.VarChar(3)
+  numberOfPieces         Int
+  deliveryNoteReference  String?
+  deliveryNoteCode       String?
+  deliveryNoteLetter     String?
+  piecesPerPackage       Int?
+  vbnPackageCode         Int?
+  customPackageId        String?         @db.Uuid
+  packagesPerLayer       Int?
+  layersPerLoadCarrier   Int?
+  loadCarrier            String?
+  tradePeriodStart       DateTime        @db.Timestamptz
+  tradePeriodEnd         DateTime        @db.Timestamptz
+  supplierOrganizationId String          @db.Uuid
+  creationDateTime       DateTime        @db.Timestamptz
+  lastModifiedDateTime   DateTime?       @db.Timestamptz
+  auctionDate            DateTime        @db.Date
+  initialAuctionLocation AuctionLocation
+  photoUrl               String?
+
+  supplyLine             SupplyLine      @relation(fields: [supplyLineId], references: [supplyLineId])
+
+  @@unique([supplyLineId, sequenceNumber])
+  @@index([supplyLineId, observedAt])
+}
+
+model TradeItem {
+  tradeItemId             String   @id @db.Uuid
+  supplierOrganizationId  String   @db.Uuid
+  name                    String
+  vbnProductCode          Int?
+  code                    String?
+  gtin                    String?
+  botanicalNames          String[]
+  countryOfOriginIsoCodes String[]
+  tradeItemVersion        Int?
+  isDeleted               Boolean  @default(false)
+  sequenceNumber          BigInt
+
+  characteristics         Json?
+  photos                  Json?
+  packingConfigurations   Json?
+
+  fetchedAt               DateTime @db.Timestamptz
+
+  @@index([name])
+  @@index([vbnProductCode])
+  @@index([supplierOrganizationId])
+}
+
+model Organization {
+  organizationId   String    @id @db.Uuid
+  name             String?
+  commercialName   String?
+  companyGln       String?
+  rfhRelationId    String?
+  organizationType String?
+  city             String?
+  countryCode      String?   @db.VarChar(2)
+  endDate          DateTime? @db.Timestamptz
+  sequenceNumber   BigInt
+
+  @@index([name])
+  @@index([companyGln])
+}
+
+model SyncState {
+  resource           String   @id
+  lastSequenceNumber BigInt   @default(0)
+  updatedAt          DateTime @updatedAt @db.Timestamptz
+}
+
+model SyncRun {
+  id             BigInt      @id @default(autoincrement())
+  resource       String
+  trigger        SyncTrigger
+  startedAt      DateTime    @db.Timestamptz
+  finishedAt     DateTime?   @db.Timestamptz
+  pagesProcessed Int         @default(0)
+  rowsProcessed  Int         @default(0)
+  rowsInserted   Int         @default(0)
+  versionsAdded  Int         @default(0)
+  status         SyncStatus
+  errorMessage   String?
+
+  @@index([resource, startedAt])
+}
