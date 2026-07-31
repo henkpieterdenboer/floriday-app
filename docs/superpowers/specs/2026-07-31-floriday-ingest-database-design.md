@@ -332,17 +332,12 @@ Weet hoe je één bron doorloopt:
 
 Verwerkt een pagina in één transactie, in deze volgorde:
 
-1. **Versies bijschrijven, maar alleen als er inhoudelijk iets verandert.** In drie
-   stappen:
+1. **Bepalen wat er echt gewijzigd is, vóór er iets overschreven wordt.**
 
    a. De bestaande rijen ophalen voor de `supplyLineId`'s van deze pagina — één query met
       een `IN`-lijst van maximaal duizend sleutels.
    b. Een pure functie bepaalt welke binnengekomen regels afwijken van wat er staat. Geen
       database, geen netwerk, dus volledig te testen met vaste invoer.
-   c. Alleen die regels invoegen, met `skipDuplicates` op de unieke sleutel.
-
-   Dit moet vóór stap 2, want daarna is de vergelijkingsbasis overschreven. De eerste
-   waarneming van een regel schrijft altijd weg, omdat er dan nog geen rij bestaat.
 
    De vergelijking gebeurt bewust in TypeScript en niet in SQL. Een `NOT EXISTS` over
    twintig kolommen vereist `IS NOT DISTINCT FROM` in plaats van `=` — anders levert elke
@@ -350,18 +345,44 @@ Verwerkt een pagina in één transactie, in deze volgorde:
    keer weg. Dat is een stille fout die pas maanden later opvalt als het archief is
    volgelopen. Een pure functie met tests eromheen is hier veiliger dan slimme SQL.
 
-2. Hoofdtabel bijwerken (`upsert`, met `lastSeenAt` altijd bij, `firstSeenAt` alleen bij
-   invoegen).
-3. Cursor ophogen in `SyncState`.
+2. **Hoofdtabel bijwerken** met één bulk `INSERT ... ON CONFLICT DO UPDATE` voor de hele
+   pagina. `lastSeenAt` gaat altijd mee, `firstSeenAt` blijft bij een conflict ongemoeid.
 
-Die volgorde is het hele herstelverhaal: de cursor loopt nooit voor op de data. Een run
-die halverwege sneuvelt laat geen gat achter maar hooguit werk dat opnieuw gedaan wordt.
+3. **Versies bijschrijven** voor de regels die in stap 1b als gewijzigd zijn aangemerkt,
+   met `skipDuplicates` op de unieke sleutel.
+
+4. Cursor ophogen in `SyncState`.
+
+De volgorde van 2 en 3 is niet vrij te kiezen: `SupplyLineVersion` heeft een foreign key
+naar `SupplyLine`, dus bij de allereerste waarneming van een regel bestaat de hoofdrij nog
+niet en faalt een versie-insert. Dat het *bepalen* van de wijziging (stap 1) wel vóór de
+update moet, blijft onverkort gelden — daarna is de vergelijkingsbasis weg. Vandaar de
+splitsing: eerst vaststellen, dan schrijven.
+
+**Stap 2 en 3 horen in één transactie**, en dat is geen formaliteit. Sneuvelt het proces
+tussen beide, dan staat de hoofdtabel al op de nieuwe waarden terwijl de versie die de
+verandering vastlegt ontbreekt. Bij de volgende poging vergelijkt de wijzigingsdetectie de
+binnenkomende regel met de reeds bijgewerkte rij, ziet geen verschil, en schrijft de
+ontbrekende versie nooit alsnog. Precies het gegeven waarvoor het archief bestaat is dan
+stilzwijgend verdwenen. Met een transactie rolt zo'n halve schrijfactie volledig terug en
+levert opnieuw draaien het juiste resultaat, want de cursor is nog niet opgehoogd.
 
 Twee mechanismen houden het archief schoon, en ze vangen verschillende dingen af. De
 unieke sleutel voorkomt dubbele rijen als dezelfde pagina opnieuw verwerkt wordt. De
-`NOT EXISTS` voorkomt betekenisloze versies wanneer Floriday een regel een nieuw
+wijzigingsdetectie voorkomt betekenisloze versies wanneer Floriday een regel een nieuw
 sequencenummer geeft zonder inhoudelijke wijziging — zie de toelichting bij de
 testaanpak.
+
+### Waarom bulk en niet per regel
+
+Gemeten tegen Neon in Frankfurt: een `upsert` per regel kost ongeveer 45 milliseconden aan
+netwerkverkeer. Over een pagina van duizend regels is dat 45 seconden — meer dan de
+transactietimeout — en over de volledige inhaalslag van 1200 pagina's zo'n **vijftien uur**.
+Eén bulk-statement per pagina doet dezelfde duizend regels in ongeveer één seconde, wat de
+inhaalslag terugbrengt tot **circa twintig minuten**.
+
+Dat verschil maakt de bulkvariant geen optimalisatie maar een voorwaarde: de per-regel
+versie haalt de eindstreep niet eens.
 
 ### Artikelen bijwerken
 

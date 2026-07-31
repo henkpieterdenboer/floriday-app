@@ -1951,6 +1951,24 @@ git commit -m "feat: track sync cursor and run log"
 
 ## Taak 12: Een pagina wegschrijven
 
+> **Gecorrigeerd tijdens de bouw — lees dit voordat je de code hieronder gebruikt.**
+>
+> Twee dingen in de schets hieronder klopten niet:
+>
+> 1. **De schrijfvolgorde kan niet.** `SupplyLineVersion` heeft een foreign key naar
+>    `SupplyLine`, dus bij de eerste waarneming van een regel bestaat de hoofdrij nog niet
+>    en faalt een versie-insert. De juiste volgorde is: lezen, verschil bepalen, hoofdtabel
+>    bijwerken, dán versies bijschrijven. Het *bepalen* van het verschil moet nog steeds
+>    vóór de update, anders is de vergelijkingsbasis weg.
+> 2. **De `upsert` per regel is onbruikbaar.** Gemeten tegen Neon Frankfurt: 45 ms per
+>    regel, dus 45 seconden per pagina van duizend — meer dan de transactietimeout — en
+>    ongeveer vijftien uur over de volledige inhaalslag. Vervangen door één bulk
+>    `INSERT ... ON CONFLICT DO UPDATE` per pagina: circa één seconde per duizend regels,
+>    twintig minuten voor de hele inhaalslag.
+>
+> De opgeleverde implementatie staat in `src/features/floriday/sync/write-supply-page.ts`.
+> Zie ook de spec, paragraaf 5.
+
 **Files:**
 - Create: `src/features/floriday/sync/write-supply-page.ts`
 - Test: `tests/integration/write-supply-page.test.ts`
