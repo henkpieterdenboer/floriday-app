@@ -96,7 +96,10 @@ describe("runOrganizationSyncWith", () => {
       .mockResolvedValueOnce(orgPage([2], 100));
 
     const deps = fakeDeps({ client: { getJson } });
-    const result = await runOrganizationSyncWith({ trigger: "CRON", maxPages: 1 }, deps);
+    const result = await runOrganizationSyncWith(
+      { trigger: "CRON", maxPages: 1, pageSize: 1 },
+      deps,
+    );
 
     expect(result.pagesProcessed).toBe(1);
     expect(result.reachedEnd).toBe(false);

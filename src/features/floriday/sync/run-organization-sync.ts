@@ -11,6 +11,8 @@ export interface RunOrganizationSyncOptions {
   /** Bounds one run. The cron route passes a small number; the backfill passes none. */
   maxPages?: number;
   onProgress?: (message: string) => void;
+  /** Overrides the underlying sync's page size. Exists for tests; production never sets it. */
+  pageSize?: number;
 }
 
 /**
@@ -32,7 +34,7 @@ export async function runOrganizationSyncWith(
   options: RunOrganizationSyncOptions,
   deps: RunOrganizationSyncDeps,
 ): Promise<SyncOrganizationsResult> {
-  const { trigger, maxPages, onProgress } = options;
+  const { trigger, maxPages, onProgress, pageSize } = options;
   const runId = await deps.startRun(trigger);
 
   const writePage = async (rows: OrganizationRow[]): Promise<WriteOrganizationsResult> => {
@@ -50,6 +52,7 @@ export async function runOrganizationSyncWith(
       writePage,
       writeCursor: deps.writeCursor,
       maxPages,
+      pageSize,
     });
 
     await deps.finishRun(runId, {

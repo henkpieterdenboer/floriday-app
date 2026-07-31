@@ -1,8 +1,22 @@
-import { supplyPageSchema, type SupplyPage } from "@/features/floriday/schemas/supply-line";
+import { z } from "zod";
+import { supplyLineSchema } from "@/features/floriday/schemas/supply-line";
 import { toSupplyLineRow, type SupplyLineRow } from "@/features/floriday/mappers/supply-line";
 import type { WriteResult } from "@/features/floriday/sync/write-supply-page";
 
 const PAGE_SIZE = 1000;
+
+/**
+ * Only the shape needed to drive the loop - individual records are validated one at a
+ * time below, deliberately not as part of this schema, so one malformed record does not
+ * take the rest of an otherwise-good page down with it.
+ */
+const rawPageSchema = z.object({
+  maximumSequenceNumber: z.number().int(),
+  results: z.array(z.unknown()),
+});
+
+/** Enough to recover a sequence number from a record that fails full validation. */
+const sequenceNumberOnlySchema = z.object({ sequenceNumber: z.number().int() });
 
 export interface SyncSupplyLinesOptions {
   client: { getJson<T>(path: string): Promise<T> };
@@ -12,6 +26,8 @@ export interface SyncSupplyLinesOptions {
   now: () => Date;
   /** Stops after this many pages. Used by the cron route to bound one run. */
   maxPages?: number;
+  /** Overrides PAGE_SIZE. Exists for tests; production always uses the default. */
+  pageSize?: number;
 }
 
 export interface SyncSupplyLinesResult {
@@ -27,7 +43,8 @@ export interface SyncSupplyLinesResult {
 export async function syncSupplyLines(
   options: SyncSupplyLinesOptions,
 ): Promise<SyncSupplyLinesResult> {
-  const { client, writePage, writeCursor, now, maxPages = Infinity } = options;
+  const { client, writePage, writeCursor, now, maxPages = Infinity, pageSize = PAGE_SIZE } =
+    options;
 
   let cursor = options.startCursor;
   let pagesProcessed = 0;
@@ -39,12 +56,13 @@ export async function syncSupplyLines(
 
   while (pagesProcessed < maxPages) {
     const raw = await client.getJson<unknown>(
-      `/auction/clock-presales-supply/sync/${cursor}?limit=${PAGE_SIZE}`,
+      `/auction/clock-presales-supply/sync/${cursor}?limit=${pageSize}`,
     );
-    const page: SupplyPage = supplyPageSchema.parse(raw);
+    const page = rawPageSchema.parse(raw);
     const maximumSequenceNumber = BigInt(page.maximumSequenceNumber);
+    const rawResults = page.results;
 
-    if (page.results.length === 0) {
+    if (rawResults.length === 0) {
       // Floriday's own docs warn that an empty page does not prove we are caught up:
       // results can be filtered on our connections while the maximum sequence number keeps
       // climbing. We currently see no such filtering on clock supply (35 zero-connection
@@ -60,14 +78,49 @@ export async function syncSupplyLines(
       break;
     }
 
-    const rows = page.results.map(toSupplyLineRow);
+    // Validate each record individually so a single malformed one does not abort the whole
+    // page - seen in practice on the sibling organizations feed (see organizations.ts) with
+    // records that failed strict validation only to be gone from the same query moments
+    // later, apparently transient on Floriday's side. A multi-hour backfill over ~1.2M rows
+    // cannot afford to be one bad row away from stopping dead. Records that fail full
+    // validation are skipped and reported, not written; their sequence number is still
+    // recovered where possible so the cursor advances past them instead of asking for the
+    // same broken record forever.
+    const rows: SupplyLineRow[] = [];
+    const sequenceNumbers: bigint[] = [];
+    let skipped = 0;
+
+    for (const item of rawResults) {
+      const parsed = supplyLineSchema.safeParse(item);
+      if (parsed.success) {
+        rows.push(toSupplyLineRow(parsed.data));
+        sequenceNumbers.push(BigInt(parsed.data.sequenceNumber));
+        continue;
+      }
+
+      skipped += 1;
+      const sequenceOnly = sequenceNumberOnlySchema.safeParse(item);
+      if (sequenceOnly.success) sequenceNumbers.push(BigInt(sequenceOnly.data.sequenceNumber));
+    }
+
+    if (sequenceNumbers.length === 0) {
+      // Every record in the page failed to parse in any useful way, not even enough to
+      // recover a sequence number. Same rationale as the non-advancing-cursor guard below:
+      // stop rather than spin on a page we cannot make progress through.
+      warning =
+        `Every record in the page at cursor ${cursor} failed to parse (${skipped} of ` +
+        `${rawResults.length}); investigate before the next run.`;
+      break;
+    }
 
     // Take the highest sequence number in the page rather than trusting that the last row
     // in the array is the highest. Floriday's sync semantics are defined by sequenceNumber
     // ordering, not array position, and this is equally cheap to compute either way.
-    let maxInPage = rows[0].sequenceNumber;
-    for (const row of rows) {
-      if (row.sequenceNumber > maxInPage) maxInPage = row.sequenceNumber;
+    // Computed over every record Floriday returned, valid or not, so a persistently
+    // malformed record does not get re-requested forever.
+    let maxInPage = sequenceNumbers[0];
+    for (const seq of sequenceNumbers) {
+      if (seq > maxInPage) maxInPage = seq;
     }
 
     if (maxInPage <= cursor) {
@@ -93,7 +146,29 @@ export async function syncSupplyLines(
     versionsAdded += written.versionsAdded;
     duplicatesCollapsed += written.duplicatesCollapsed;
 
-    if (cursor >= maximumSequenceNumber) {
+    if (skipped > 0) {
+      warning =
+        `Skipped ${skipped} malformed supply line record(s) out of ${rawResults.length} ` +
+        `in the page at cursor ${cursor}; see logs for details.`;
+      console.warn(warning);
+    }
+
+    // A page shorter than what we asked for means Floriday had no more matching rows to
+    // fill it with - the standard end-of-data signal for this kind of limit/offset walk.
+    // Checked against what Floriday returned (rawResults), not what we wrote (rows), so a
+    // page that was actually full but had some records skipped is not mistaken for a short
+    // one.
+    //
+    // maximumSequenceNumber is deliberately NOT used for this check. It reads like it
+    // should be a stable bound for the whole feed ("you are up to date when your cursor
+    // equals it" per Floriday's docs), but measured against the real API it is scoped to
+    // the page just returned: querying the same cursor with a smaller limit returns a
+    // smaller maximumSequenceNumber, and it always exactly equals the highest sequence
+    // number in that response's own results. Comparing our post-page cursor (also the
+    // page's own max) against it is therefore comparing a number to itself - true on
+    // every full page regardless of how much more data remains beyond it, which is
+    // exactly what a length check does not get wrong.
+    if (rawResults.length < pageSize) {
       reachedEnd = true;
       break;
     }

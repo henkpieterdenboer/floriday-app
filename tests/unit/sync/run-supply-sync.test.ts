@@ -88,9 +88,11 @@ function fakeDeps(overrides: Partial<RunSupplySyncDeps> = {}): RunSupplySyncDeps
 
 describe("runSupplySyncWith", () => {
   it("tops up trade items collected from the written pages, deduplicated, minus already-known ids", async () => {
+    // pageSize 3: page 1 is full (3 results) so the walk continues to page 2; page 2 is
+    // short (1 result) so the walk stops there and moves on to the trade-item top-up.
     const getJson = vi.fn()
-      .mockResolvedValueOnce(supplyPage([[1, idA], [2, idB]], 4))
-      .mockResolvedValueOnce(supplyPage([[3, idA], [4, idC]], 4))
+      .mockResolvedValueOnce(supplyPage([[1, idA], [2, idB], [3, idC]], 999))
+      .mockResolvedValueOnce(supplyPage([[4, idA]], 999))
       // Response for the trade-items lookup.
       .mockResolvedValueOnce([tradeItem(idB), tradeItem(idC)]);
 
@@ -103,7 +105,7 @@ describe("runSupplySyncWith", () => {
       saveTradeItems,
     });
 
-    const result = await runSupplySyncWith({ trigger: "MANUAL" }, deps);
+    const result = await runSupplySyncWith({ trigger: "MANUAL", pageSize: 3 }, deps);
 
     // idA appeared twice across two pages but is already known - asked about once, not fetched.
     expect(findKnownTradeItemIds).toHaveBeenCalledTimes(1);
@@ -158,6 +160,8 @@ describe("runSupplySyncWith", () => {
   });
 
   it("on failure, tops up trade items for pages already written, records FAILED, and rethrows", async () => {
+    // pageSize 1: page 1 (1 result) is full, so the walk goes on to fetch page 2, which
+    // is where the failure actually comes from.
     const getJson = vi.fn()
       .mockResolvedValueOnce(supplyPage([[1, idA]], 100))
       .mockRejectedValueOnce(new Error("network down"))
@@ -170,7 +174,9 @@ describe("runSupplySyncWith", () => {
 
     const deps = fakeDeps({ client: { getJson }, findKnownTradeItemIds, saveTradeItems, finishRun });
 
-    await expect(runSupplySyncWith({ trigger: "CRON" }, deps)).rejects.toThrow("network down");
+    await expect(
+      runSupplySyncWith({ trigger: "CRON", pageSize: 1 }, deps),
+    ).rejects.toThrow("network down");
 
     expect(findKnownTradeItemIds).toHaveBeenCalledWith([idA]);
     expect(saveTradeItems).toHaveBeenCalledTimes(1);
@@ -181,6 +187,9 @@ describe("runSupplySyncWith", () => {
   });
 
   it("rethrows the original sync error even when the best-effort trade item top-up also fails", async () => {
+    // pageSize 1: page 1 (1 result) is full, so the walk goes on to fetch page 2, which
+    // rejects - the failure needs to come from the sync itself, not incidentally from the
+    // trade-item top-up call sharing the same mocked client.
     const getJson = vi.fn()
       .mockResolvedValueOnce(supplyPage([[1, idA]], 100))
       .mockRejectedValueOnce(new Error("network down"));
@@ -188,7 +197,9 @@ describe("runSupplySyncWith", () => {
     const findKnownTradeItemIds = vi.fn().mockRejectedValue(new Error("db also down"));
     const deps = fakeDeps({ client: { getJson }, findKnownTradeItemIds });
 
-    await expect(runSupplySyncWith({ trigger: "CRON" }, deps)).rejects.toThrow("network down");
+    await expect(
+      runSupplySyncWith({ trigger: "CRON", pageSize: 1 }, deps),
+    ).rejects.toThrow("network down");
   });
 
   it("rethrows the original sync error even when finishRun itself fails", async () => {
@@ -220,7 +231,10 @@ describe("runSupplySyncWith", () => {
     const findKnownTradeItemIds = vi.fn().mockResolvedValue(new Set([idA]));
 
     const deps = fakeDeps({ client: { getJson }, findKnownTradeItemIds });
-    const result = await runSupplySyncWith({ trigger: "CRON", maxPages: 1 }, deps);
+    const result = await runSupplySyncWith(
+      { trigger: "CRON", maxPages: 1, pageSize: 1 },
+      deps,
+    );
 
     expect(result.pagesProcessed).toBe(1);
     expect(result.reachedEnd).toBe(false);

@@ -14,6 +14,8 @@ export interface RunSupplySyncOptions {
   /** Bounds one run. The cron route passes a small number; the backfill passes none. */
   maxPages?: number;
   onProgress?: (message: string) => void;
+  /** Overrides the underlying sync's page size. Exists for tests; production never sets it. */
+  pageSize?: number;
 }
 
 export type RunSupplySyncResult = SyncSupplyLinesResult & { tradeItemsAdded: number };
@@ -52,7 +54,7 @@ export async function runSupplySyncWith(
   options: RunSupplySyncOptions,
   deps: RunSupplySyncDeps,
 ): Promise<RunSupplySyncResult> {
-  const { trigger, maxPages, onProgress } = options;
+  const { trigger, maxPages, onProgress, pageSize } = options;
   const runId = await deps.startRun(trigger);
 
   const touchedTradeItemIds = new Set<string>();
@@ -87,6 +89,7 @@ export async function runSupplySyncWith(
       writeCursor: deps.writeCursor,
       now: deps.now,
       maxPages,
+      pageSize,
     });
 
     const tradeItemsAdded = await topUpTradeItems();

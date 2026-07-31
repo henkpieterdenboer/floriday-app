@@ -41,10 +41,13 @@ function page(sequences: number[], maximumSequenceNumber: number): SupplyPage {
 const written = () => ({ rowsProcessed: 2, versionsAdded: 2, duplicatesCollapsed: 0 });
 
 describe("syncSupplyLines", () => {
-  it("walks pages until the cursor reaches the maximum", async () => {
+  it("walks pages until a short page signals the end", async () => {
+    // pageSize 2: page 1 is full (2 results) so the walk continues; page 2 is short
+    // (1 result) so it stops there. maximumSequenceNumber is set far beyond either page
+    // deliberately - it must not influence this decision (see supply-lines.ts).
     const getJson = vi.fn()
-      .mockResolvedValueOnce(page([1, 2], 4))
-      .mockResolvedValueOnce(page([3, 4], 4));
+      .mockResolvedValueOnce(page([1, 2], 999))
+      .mockResolvedValueOnce(page([3], 999));
     const writePage = vi.fn().mockResolvedValue(written());
     const writeCursor = vi.fn();
 
@@ -54,13 +57,14 @@ describe("syncSupplyLines", () => {
       writePage,
       writeCursor,
       now: () => new Date("2026-07-31T10:00:00Z"),
+      pageSize: 2,
     });
 
     expect(getJson).toHaveBeenCalledTimes(2);
     expect(result.pagesProcessed).toBe(2);
     expect(result.rowsProcessed).toBe(4);
     expect(result.reachedEnd).toBe(true);
-    expect(writeCursor).toHaveBeenLastCalledWith(4n);
+    expect(writeCursor).toHaveBeenLastCalledWith(3n);
   });
 
   it("resumes from the given cursor", async () => {
@@ -134,6 +138,7 @@ describe("syncSupplyLines", () => {
       writeCursor: vi.fn(),
       now: () => new Date(),
       maxPages: 2,
+      pageSize: 1,
     });
 
     expect(result.pagesProcessed).toBe(2);
@@ -143,7 +148,7 @@ describe("syncSupplyLines", () => {
   it("accumulates the totals reported by the writer", async () => {
     const getJson = vi.fn()
       .mockResolvedValueOnce(page([1, 2], 4))
-      .mockResolvedValueOnce(page([3, 4], 4));
+      .mockResolvedValueOnce(page([3], 4));
     const writePage = vi.fn()
       .mockResolvedValueOnce({ rowsProcessed: 2, versionsAdded: 2, duplicatesCollapsed: 0 })
       .mockResolvedValueOnce({ rowsProcessed: 2, versionsAdded: 1, duplicatesCollapsed: 3 });
@@ -154,6 +159,7 @@ describe("syncSupplyLines", () => {
       writePage,
       writeCursor: vi.fn(),
       now: () => new Date(),
+      pageSize: 2,
     });
 
     expect(result.rowsProcessed).toBe(4);
@@ -204,5 +210,53 @@ describe("syncSupplyLines", () => {
       writeCursor: vi.fn(),
       now: () => new Date(),
     })).rejects.toThrow();
+  });
+
+  it("skips a malformed record but keeps the rest of the page, still advancing the cursor past it", async () => {
+    // Seen in practice against the real API: a handful of records that fail full
+    // validation (there, organizations with a non-UUID id) while the rest of the page is
+    // fine. One bad record must not take an otherwise-good page - or a multi-hour backfill
+    // - down with it.
+    const badPage = {
+      maximumSequenceNumber: 999,
+      results: [line(1), { ...line(2), supplyLineId: "not-a-uuid" }, line(3)],
+    };
+    const getJson = vi.fn().mockResolvedValueOnce(badPage);
+    const writePage = vi.fn().mockResolvedValue(written());
+    const writeCursor = vi.fn();
+
+    const result = await syncSupplyLines({
+      client: { getJson },
+      startCursor: 0n,
+      writePage,
+      writeCursor,
+      now: () => new Date(),
+    });
+
+    expect(writePage).toHaveBeenCalledTimes(1);
+    expect(writePage.mock.calls[0][0]).toHaveLength(2);
+    // The cursor advances past the malformed record too (sequence 2), not just the two
+    // valid ones - otherwise a persistently broken record would be requested forever.
+    expect(writeCursor).toHaveBeenCalledWith(3n);
+    expect(result.pagesProcessed).toBe(1);
+    expect(result.warning).toMatch(/skipped 1 malformed/i);
+  });
+
+  it("stops with a warning when every record in a page fails to parse", async () => {
+    const getJson = vi.fn().mockResolvedValueOnce({
+      maximumSequenceNumber: 999,
+      results: [{ nonsense: true }, { alsoNonsense: 1 }],
+    });
+
+    const result = await syncSupplyLines({
+      client: { getJson },
+      startCursor: 0n,
+      writePage: vi.fn(),
+      writeCursor: vi.fn(),
+      now: () => new Date(),
+    });
+
+    expect(result.pagesProcessed).toBe(0);
+    expect(result.warning).toMatch(/failed to parse/i);
   });
 });
