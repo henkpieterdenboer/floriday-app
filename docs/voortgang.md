@@ -1,135 +1,127 @@
 # Voortgang deelproject A — ingest en database
 
-Bijgewerkt: 31 juli 2026, einde eerste bouwsessie.
+Bijgewerkt: 1 augustus 2026. **Deelproject A is af.**
 
 Plan: `docs/superpowers/plans/2026-07-31-floriday-ingest-database.md`
 Spec: `docs/superpowers/specs/2026-07-31-floriday-ingest-database-design.md`
+Gebruik: `README.md`
 
 ## Waar we staan
 
-Tien van de negentien taken klaar. 44 tests groen, typecheck schoon, alles gecommit op
-`develop`. Nog niet gepusht — er is nog geen remote.
+Alle negentien taken klaar. 145 tests groen, typecheck schoon, productiebuild slaagt.
+Alles gecommit op `develop`; nog niet gepusht, er is nog geen remote.
 
-| Taak | Status |
+De backfill van de staging-omgeving is volledig gedraaid:
+
+| | |
 |---|---|
-| 1 Git en projectskelet | klaar |
-| 2 Next.js, TypeScript, Vitest | klaar |
-| 3 Omgevingsvariabelen | klaar |
-| 4 Prisma-schema en Neon | klaar |
-| 5 Rate limiter | klaar |
-| 6 Token-cache | klaar |
-| 7 HTTP-client | klaar |
-| 8 Zod-schemas en fixtures | klaar |
-| 9 Mapper aanbodregels | klaar |
-| 10 Wijzigingsdetectie | klaar |
-| 11 Cursor en uitvoeringslog | **volgende** |
-| 12 Pagina wegschrijven | open |
-| 13 Pagineerlus | open |
-| 14 Artikelen ophalen | open |
-| 15 Organisaties | open |
-| 16 Sync samenstellen | open |
-| 17 Backfill draaien | open |
-| 18 Cron-routes | open |
-| 19 Afronden en documenteren | open |
+| Aanbodregels | 525.458 |
+| Versies | 525.458 (exact gelijk — geen ruis) |
+| Artikelen | 79.004 |
+| Organisaties | 67.342 |
+| Kwekers in het aanbod | 2.410 |
+| Veildagen | 761, van 21-05-2024 t/m 02-08-2027 |
+| Veillocaties | Aalsmeer 231.750 · Naaldwijk 136.474 · Rijnsburg 121.165 · Eelde 17.489 · RheinMaas 14.525 · Plantion 4.055 |
 
-De database is leeg: er is nog geen enkele synchronisatie gedraaid. Dat gebeurt pas bij
-taak 17.
+Koppelbaarheid: **nul** aanbodregels zonder bekende kweker, 709 (0,13%) zonder artikelnaam
+— dat zijn de 64 artikelen die Floriday met een 403 of 404 weigert.
 
-## De doorslaggevende controle is geslaagd
+## De doorslaggevende controle
 
-Drie pagina's verwerkt: 3000 regels, 3000 versies. Daarna exact dezelfde drie pagina's
-opnieuw: 3000 regels, **0 versies**. Opnieuw draaien voegt dus niets aan het archief toe,
-en bij twijfel kunnen we altijd overdoen zonder ruis te veroorzaken. Dat is de eigenschap
-waar het hele herstelverhaal op rust.
+Drie pagina's verwerkt: 3000 regels, 3000 versies. Dezelfde drie pagina's opnieuw: 3000
+regels, **0 versies**. En na de volledige backfill nog eens alles opnieuw: 0 pagina's, 0
+rijen, 0 versies, in twee seconden.
 
-## Wat de eerste echte run aan het licht bracht
+Opnieuw draaien voegt dus niets toe. Daar rust het hele herstelverhaal op: bij twijfel kun
+je altijd overdoen.
 
-**Een deel van de organisatierecords is kapot.** Vijftien van 508 in één pagina hadden een
-`organizationId` die strikte UUID-validatie niet haalt, en die waren even later uit
-dezelfde query verdwenen — het lijkt een tijdelijke toestand aan Floriday's kant. Zonder
-ingrijpen laat één zo'n record een pagina van duizend mislukken, en daarmee een backfill
-van uren. Records worden nu per stuk gevalideerd: wat faalt wordt overgeslagen, geteld en
-in de `warning` van de run gemeld, en de cursor springt eroverheen zodat hij niet blijft
-hangen op hetzelfde record.
+## Wat er onderweg misging
 
-**De artikel-aanvulling werkte alleen bij een run die helemaal afliep.** De ids werden
-tijdens de run in het geheugen verzameld en pas aan het eind opgehaald. Een onderbroken
-backfill — een time-out, een dichtgeklapte laptop — liet die ids verdampen, met
-aanbodregels die permanent naar een niet-opgehaalde naam wijzen. Nu leidt
-`findSupplyLinesWithoutTradeItem` de gaten af uit de database zelf, met een left join. Het
-gat is daarmee altijd zichtbaar en altijd te dichten, ongeacht hoeveel halve runs
-eraan voorafgingen. Los aan te roepen met `npm run backfill -- --items-only`.
+Tien dingen bleken anders dan het plan zei. Alle tien gevonden doordat subagents weigerden
+een tegenstrijdigheid glad te strijken, of doordat er echt gedraaid en gemeten werd. Spec
+en plan zijn op alle punten gecorrigeerd.
 
-## Vier dingen die anders liepen dan het plan zei
+**Fouten in mijn eigen ontwerp**
 
-Alle vier gevonden doordat subagents weigerden een tegenstrijdigheid glad te strijken.
-Het plan is op alle punten gecorrigeerd.
+1. **De schrijfvolgorde was onmogelijk.** `SupplyLineVersion` heeft een foreign key naar
+   `SupplyLine`, dus bij de eerste waarneming van een regel kan de versie niet vóór de
+   hoofdrij worden ingevoegd. Volgorde omgedraaid; het *bepalen* van het verschil moet nog
+   steeds vóór de update.
+2. **Een per-rij upsert zou vijftien uur kosten.** Gemeten: 45 ms per rij tegen Neon
+   Frankfurt, dus 45 seconden per pagina van duizend — meer dan de transactietimeout.
+   Vervangen door één bulk-statement per pagina: één seconde per duizend regels. Hetzelfde
+   gold voor organisaties (41 s per pagina tegen 131 ms).
+3. **De pagineerlus kon eeuwig draaien.** De sync levert rijen vanaf `>=` de cursor, dus de
+   rij óp de cursor kan altijd terugkomen. Zonder guard blijft een cron-job hetzelfde
+   verzoek herhalen. Ook de cursor komt nu van het maximum in de pagina in plaats van de
+   laatste rij, zodat een ongesorteerde pagina niet stilletjes data overslaat.
+4. **De retry-lus ving geen netwerkfouten.** `fetch` gooit een exception bij een verbroken
+   verbinding in plaats van een response terug te geven, en die viel er volledig buiten. De
+   backfill sneuvelde erop na twaalf minuten. Een verbroken verbinding telt nu als een 5xx.
+5. **De artikel-aanvulling overleefde geen onderbreking.** De ids werden in het geheugen
+   verzameld en pas aan het eind opgehaald; een onderbroken run liet ze verdampen. Nu leidt
+   een left join de gaten af uit de database zelf.
+6. **`satisfies` bewaakt geen volledigheid.** `CONTENT_FIELDS` bepaalt welke wijzigingen in
+   het archief belanden. Een verzonnen veldnaam werd afgekeurd, een *vergeten* veld niet —
+   een onzichtbare en onherstelbare fout. Nu een `Record<ContentField, true>`, waarmee de
+   compiler beide gevallen afvangt.
+7. **De rate limiter spreidt, hij burst niet.** Mijn test ging uit van drie gratis
+   verzoeken aan het begin; de implementatie geeft alleen het eerste direct door.
+8. **Een `Response`-body kan maar één keer gelezen worden.** De client las de body bij elke
+   mislukte poging, ook bij pogingen die daarna alsnog slaagden.
+9. **Twee velden hadden het verkeerde type.** `vbnProductCode` is een string (`"105127"`),
+   `rfhRelationId` juist een getal. In mijn schema stonden ze omgekeerd. Gevonden door de
+   Zod-schemas tegen echt opgehaalde antwoorden te valideren.
+10. **Plain `null` in een `Json?` kolom is geen SQL NULL.** Prisma slaat dan het
+    jsonb-literal `null` op. `Prisma.DbNull` is nodig voor een echte NULL.
 
-**1. De rate limiter spreidt, hij burst niet.** Mijn test ging uit van drie gratis
-verzoeken aan het begin; de implementatie geeft alleen het eerste verzoek direct door en
-laat elk volgend verzoek op zijn eigen tijdslot wachten. De implementatie was juist, de
-test niet.
+**Eigenaardigheden van de Floriday-data**
 
-**2. Een `Response`-body kan maar één keer gelezen worden.** De HTTP-client las de body
-bij elke mislukte poging, ook bij pogingen die daarna alsnog slaagden. In combinatie met
-een mock die hetzelfde `Response`-object hergebruikte gaf dat "Body has already been
-read" in plaats van de statuscode. Nu leest hij de body alleen nog op het moment dat hij
-werkelijk een fout gooit.
+- Ongeveer 3 tot 7 van elke 1000 aanbodregels falen op validatie, en 15 van 508
+  organisatierecords hadden een `organizationId` dat geen geldige UUID is — even later
+  waren die uit dezelfde query verdwenen. Records worden nu per stuk gevalideerd: wat
+  faalt wordt overgeslagen, geteld en in de `warning` van de run gemeld, en de cursor
+  springt eroverheen.
+- 64 artikelen geven 403 of 404. Vermoedelijk klantspecifieke artikelen van andere kopers,
+  plus één nul-UUID die als placeholder in de data staat.
 
-**3. Twee velden hadden het verkeerde type.** `vbnProductCode` blijkt een string
-(`"105127"`) en `rfhRelationId` juist een getal. In mijn schema stonden ze omgekeerd.
-Gevonden door de Zod-schemas tegen echt opgehaalde API-antwoorden te valideren in plaats
-van tegen verzonnen JSON.
-
-**4. `satisfies` bewaakt geen volledigheid.** `CONTENT_FIELDS` bepaalt welke
-veldwijzigingen in het archief belanden. Met `as const satisfies` werd een verzonnen
-veldnaam wél afgekeurd, maar een *vergeten* veld niet. Dat is een onzichtbare en
-onherstelbare fout: wijzigingen aan dat veld zouden nooit gearchiveerd worden. Nu een
-`Record<ContentField, true>`, waarmee de compiler beide gevallen afvangt. Bewezen door
-beide faalmodi te forceren.
-
-## Poort 5432 staat dicht
-
-Uitgaand TCP 5432 is geblokkeerd op dit netwerk, dus `prisma db push` en `prisma migrate`
-kunnen Neon niet bereiken. De Neon serverless driver praat WebSocket over 443 en komt er
-wel doorheen.
-
-`npm run db:push` draait daarom `scripts/db-push.mjs`: dat genereert de DDL met
-`prisma migrate diff` (heeft geen verbinding nodig) en voert die uit over de
-WebSocket-driver. `prisma/applied.prisma` houdt bij wat er is toegepast, zodat
-incrementele wijzigingen werken. `npm run db:push:dry` toont alleen de DDL.
-
-Niet met de hand aanpassen: `prisma/applied.prisma`.
-
-## Omgeving
+## Omgeving en valkuilen
 
 | | |
 |---|---|
 | Neon | project `floriday-middleware-test`, Frankfurt, Postgres 18 |
-| Prisma | 6.19.3, vastgezet op 6 (npm wilde 7 installeren) |
-| Fixtures | `tests/fixtures/*.json`, buiten git, opnieuw op te halen met `npm run capture-fixtures` |
-| `.env` | compleet: Floriday staging, Neon, en een cron-geheim |
+| Prisma | 6.19.3, vastgezet op 6 — npm wil anders 7 installeren |
+| TypeScript | 6.0.3, vastgezet — Next.js 16 weigert te bouwen met TypeScript 7 |
+| Fixtures | `tests/fixtures/*.json`, buiten git, op te halen met `npm run capture-fixtures` |
 
-## Zo pak je het weer op
+**Poort 5432 staat dicht** op dit netwerk, dus `prisma db push` bereikt Neon niet.
+`npm run db:push` draait `scripts/db-push.mjs`, dat de DDL genereert met `prisma migrate
+diff` en die over de WebSocket-driver uitvoert. `prisma/applied.prisma` houdt bij wat is
+toegepast — niet met de hand aanpassen.
 
-Taak 11 is aan de beurt: `SyncState` en `SyncRun`, met integratietests tegen de database.
-Vanaf hier raakt elke taak de database, dus dit is het punt waarop de sync echt gaat
-draaien.
+## Wat nu
 
-Twee dingen om in gedachten te houden bij taak 12, de schrijflaag:
+**Openstaand bij Royal FloraHolland.** `docs/vragen-voor-rfh.md` bevat de volledige lijst,
+onderbouwd met cijfers uit de gevulde database. De drie die het zwaarst wegen:
 
-- Prisma geeft `pricePerPiece` terug als `Decimal`. Voor de vergelijking moet dat weer
-  een vaste-punt-string worden met `.toFixed(4)`, anders lijkt elke regel gewijzigd.
-- De volgorde binnen de transactie is niet vrijblijvend: eerst de bestaande rijen lezen,
-  dan de versies bijschrijven, dan pas de hoofdtabel bijwerken. Andersom is de
-  vergelijkingsbasis al overschreven.
+1. Zien we het volledige klokaanbod of een percentage? De API-docs en het Helpcenter
+   spreken elkaar tegen.
+2. Komt er een sync-endpoint op clock supply voor kopers?
+3. Geldt het netwerkfilter op productie wel? Wij hebben nul connecties en krijgen 2.410
+   kwekers binnen — als dat op productie anders is, wordt ons beeld veel smaller.
 
-De doorslaggevende controle komt in taak 17: de backfill twee keer over dezelfde pagina's
-draaien moet de tweede keer `versions: 0` opleveren.
+**Nog te regelen aan onze kant**
 
-## Nog steeds open richting Royal FloraHolland
+- Naam en e-mailadres van de ontwikkelaar voor het Slack-kanaal van RFH.
+- Antwoord op de Daytrade-vraag.
+- Productiecredentials en een productie-API-key. Let op: die key wordt maar één keer
+  getoond.
+- Een tweede Neon-project voor productie — geen branch, conform de projectafspraak.
+- Een git remote; er is er nog geen, dus `develop` staat alleen lokaal.
 
-`docs/concept-mail-arjan.md` is klaar op twee placeholders na (naam ontwikkelaar voor
-Slack, antwoord op de Daytrade-vraag). De inhoudelijke vraag daarin — welk deel van het
-klokaanbod we via klokvoorverkoop zien — staat nog open en bepaalt wat we intern over dit
-overzicht mogen beweren.
+**Volgende deelprojecten**
+
+- **B — zoekinterface.** Een grid dat serverside filtert, sorteert en pagineert. Bij een
+  half miljoen rijen doet Postgres het werk en toont het grid een klein venster.
+- **C — distributie.** De dagelijkse doorgifte naar de interne informatievoorziening. Waar
+  die data heen moet is nog niet bepaald.

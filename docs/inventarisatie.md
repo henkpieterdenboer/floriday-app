@@ -308,6 +308,10 @@ materiaal, of als snelle tussenoplossing.
 2. ~~Admin-rechten via Arjan~~ — gedaan.
 3. ~~API key aanmaken en veiligstellen~~ — staat in `.env`, koppeling getest en werkend.
 4. ~~Credentials naar `.env` + `.gitignore`~~ — gedaan.
+5. ~~Deelproject A: ingest en database~~ — opgeleverd. Zie `README.md` voor gebruik. De
+   volledige backfill van staging leverde 525.458 aanbodregels op, 79.004 artikelen,
+   67.342 organisaties, 2.410 kwekers over 761 veildagen van 21-05-2024 tot 02-08-2027.
+   Opnieuw draaien voegt niets toe.
 
 **Open, aan RFH-kant:**
 5. Bevestiging welk deel van het klokaanbod via `clock-presales-supply` binnenkomt
