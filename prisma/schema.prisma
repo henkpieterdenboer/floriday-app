@@ -115,7 +115,8 @@ model TradeItem {
   tradeItemId             String   @id @db.Uuid
   supplierOrganizationId  String   @db.Uuid
   name                    String
-  vbnProductCode          Int?
+  // A string, not a number: the API sends "105127" and "973" as text.
+  vbnProductCode          String?
   code                    String?
   gtin                    String?
   botanicalNames          String[]
@@ -140,7 +141,8 @@ model Organization {
   name             String?
   commercialName   String?
   companyGln       String?
-  rfhRelationId    String?
+  // A number, not a string: the API sends it unquoted.
+  rfhRelationId    Int?
   organizationType String?
   city             String?
   countryCode      String?   @db.VarChar(2)

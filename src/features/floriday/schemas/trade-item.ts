@@ -56,7 +56,9 @@ export const tradeItemSchema = z.object({
   hasInvalidFloricodeData: z.boolean(),
   sequenceNumber: z.number().int(),
   creationDateTime: z.string(),
-  lastModifiedDateTime: z.string(),
+  // Nullable on purpose: all five captured samples had a value, but supply lines use the
+  // same field name and are null there whenever nothing has changed since creation.
+  lastModifiedDateTime: z.string().nullable(),
   parentId: z.string().nullable(),
   characteristics: characteristicSchema.array().nullable(),
   seasonalPeriods: seasonalPeriodSchema.array(),
