@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+input/
+.next/
+dist/
+*.log
+coverage/
+prisma/generated/
+tests/fixtures/*.json
+!tests/fixtures/.gitkeep
