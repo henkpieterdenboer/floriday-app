@@ -84,7 +84,12 @@ describe("writeSupplyPage", () => {
 
   it("writes nothing and reports zero for an empty page", async () => {
     const result = await writeSupplyPage([], new Date());
-    expect(result).toEqual({ rowsProcessed: 0, versionsAdded: 0 });
+    expect(result).toEqual({ rowsProcessed: 0, versionsAdded: 0, duplicatesCollapsed: 0 });
+  });
+
+  it("reports nothing collapsed for a page without duplicates", async () => {
+    const result = await writeSupplyPage(rows, new Date());
+    expect(result.duplicatesCollapsed).toBe(0);
   });
 
   // The single raw multi-row upsert is hand-built SQL with per-column casts (see the
@@ -176,6 +181,7 @@ describe("writeSupplyPage", () => {
 
     expect(result.rowsProcessed).toBe(rows.length);
     expect(result.versionsAdded).toBe(rows.length);
+    expect(result.duplicatesCollapsed).toBe(1);
 
     const stored = await prisma.supplyLine.findUniqueOrThrow({
       where: { supplyLineId: rows[0].supplyLineId },

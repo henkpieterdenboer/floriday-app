@@ -7,6 +7,13 @@ import { dedupeSupplyLines } from "@/features/floriday/sync/dedupe-lines";
 export interface WriteResult {
   rowsProcessed: number;
   versionsAdded: number;
+  /**
+   * How many rows were dropped as duplicates within this page. Expected to be zero
+   * always. It is reported rather than silently swallowed because a non-zero value means
+   * an assumption about Floriday's paging no longer holds, and that is worth noticing
+   * the first time it happens instead of months later.
+   */
+  duplicatesCollapsed: number;
 }
 
 /**
@@ -114,7 +121,9 @@ export async function writeSupplyPage(
   rows: readonly SupplyLineRow[],
   observedAt: Date,
 ): Promise<WriteResult> {
-  if (rows.length === 0) return { rowsProcessed: 0, versionsAdded: 0 };
+  if (rows.length === 0) {
+    return { rowsProcessed: 0, versionsAdded: 0, duplicatesCollapsed: 0 };
+  }
 
   const deduped = dedupeSupplyLines(rows);
   const ids = deduped.map((row) => row.supplyLineId);
@@ -148,5 +157,9 @@ export async function writeSupplyPage(
     }
   }, { timeout: 15_000 });
 
-  return { rowsProcessed: deduped.length, versionsAdded: changed.length };
+  return {
+    rowsProcessed: deduped.length,
+    versionsAdded: changed.length,
+    duplicatesCollapsed: rows.length - deduped.length,
+  };
 }
