@@ -4,14 +4,22 @@
  * after every page and rewriting a page adds no duplicate versions.
  *
  * Usage:
- *   npm run backfill              full run
- *   npm run backfill -- --pages 5 stop after five pages, for a first try
- *   npm run backfill -- --reset   start over from sequence zero
+ *   npm run backfill                 full run
+ *   npm run backfill -- --pages 5    stop after five pages, for a first try
+ *   npm run backfill -- --reset      start over from sequence zero
+ *   npm run backfill -- --items-only only close gaps in the trade item lookup
  */
 import "dotenv/config";
 import { prisma } from "@/lib/db";
+import { createCustomersClient } from "@/features/floriday/client";
 import { runSupplySync } from "@/features/floriday/sync/run-supply-sync";
 import { runOrganizationSync } from "@/features/floriday/sync/run-organization-sync";
+import { fetchMissingTradeItems } from "@/features/floriday/sync/trade-items";
+import {
+  findKnownTradeItemIds,
+  findSupplyLinesWithoutTradeItem,
+  saveTradeItems,
+} from "@/features/floriday/sync/trade-items-store";
 import { SUPPLY_RESOURCE, ORGANIZATION_RESOURCE, writeCursor } from "@/features/floriday/sync/cursor";
 
 function readFlag(name: string): string | undefined {
@@ -72,8 +80,43 @@ function createProgressReporter(label: string): (message: string) => void {
   };
 }
 
+/**
+ * Fetches every trade item a stored supply line points at but the lookup table lacks.
+ *
+ * Deliberately driven by a database query rather than by what the sync run just touched.
+ * A backfill of over a million rows gets interrupted - by a timeout, a laptop lid, a
+ * network hiccup - and whatever ids that run was holding in memory die with it. Asking
+ * the database instead means the gap is always visible and always closable, no matter how
+ * many partial runs preceded this one.
+ */
+async function closeTradeItemGaps(): Promise<number> {
+  const missing = await findSupplyLinesWithoutTradeItem();
+  if (missing.length === 0) {
+    console.log("  no gaps in the trade item lookup");
+    return 0;
+  }
+
+  console.log(`  ${missing.length} referenced trade items not stored yet, fetching...`);
+
+  return fetchMissingTradeItems({
+    client: createCustomersClient(),
+    tradeItemIds: missing,
+    findKnownIds: findKnownTradeItemIds,
+    saveTradeItems,
+    now: () => new Date(),
+  });
+}
+
 async function main(): Promise<void> {
   const startedAt = Date.now();
+
+  if (process.argv.includes("--items-only")) {
+    console.log("Closing gaps in the trade item lookup...");
+    const added = await closeTradeItemGaps();
+    console.log(`Done: ${added} trade items added in ${formatElapsed(Date.now() - startedAt)}`);
+    await prisma.$disconnect();
+    return;
+  }
 
   if (process.argv.includes("--reset")) {
     await writeCursor(SUPPLY_RESOURCE, 0n);
@@ -100,9 +143,15 @@ async function main(): Promise<void> {
     onProgress: createProgressReporter("supply"),
   });
 
+  // Runs regardless of how the supply sync ended, so an interrupted earlier run still
+  // gets its trade items eventually.
+  console.log("Closing gaps in the trade item lookup...");
+  const gapsClosed = await closeTradeItemGaps();
+
   const seconds = Math.round((Date.now() - startedAt) / 1000);
   console.log("");
   console.log(`Done in ${seconds}s`);
+  console.log(`  gap fill:     ${gapsClosed} trade items`);
   console.log(`  pages:        ${result.pagesProcessed}`);
   console.log(`  rows:         ${result.rowsProcessed}`);
   console.log(`  versions:     ${result.versionsAdded}`);
