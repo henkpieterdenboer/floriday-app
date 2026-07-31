@@ -11,3 +11,6 @@ coverage/
 prisma/generated/
 tests/fixtures/*.json
 !tests/fixtures/.gitkeep
+
+# Next.js generated
+next-env.d.ts
