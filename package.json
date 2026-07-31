@@ -8,6 +8,8 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
     "backfill": "tsx scripts/backfill.ts",
     "capture-fixtures": "tsx scripts/capture-fixtures.ts",
