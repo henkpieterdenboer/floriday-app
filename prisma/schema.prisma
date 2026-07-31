@@ -171,6 +171,7 @@ model SyncRun {
   versionsAdded  Int         @default(0)
   status         SyncStatus
   errorMessage   String?
+  warning        String?
 
   @@index([resource, startedAt])
 }
