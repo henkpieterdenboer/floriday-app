@@ -35,6 +35,31 @@ Tien van de negentien taken klaar. 44 tests groen, typecheck schoon, alles gecom
 De database is leeg: er is nog geen enkele synchronisatie gedraaid. Dat gebeurt pas bij
 taak 17.
 
+## De doorslaggevende controle is geslaagd
+
+Drie pagina's verwerkt: 3000 regels, 3000 versies. Daarna exact dezelfde drie pagina's
+opnieuw: 3000 regels, **0 versies**. Opnieuw draaien voegt dus niets aan het archief toe,
+en bij twijfel kunnen we altijd overdoen zonder ruis te veroorzaken. Dat is de eigenschap
+waar het hele herstelverhaal op rust.
+
+## Wat de eerste echte run aan het licht bracht
+
+**Een deel van de organisatierecords is kapot.** Vijftien van 508 in één pagina hadden een
+`organizationId` die strikte UUID-validatie niet haalt, en die waren even later uit
+dezelfde query verdwenen — het lijkt een tijdelijke toestand aan Floriday's kant. Zonder
+ingrijpen laat één zo'n record een pagina van duizend mislukken, en daarmee een backfill
+van uren. Records worden nu per stuk gevalideerd: wat faalt wordt overgeslagen, geteld en
+in de `warning` van de run gemeld, en de cursor springt eroverheen zodat hij niet blijft
+hangen op hetzelfde record.
+
+**De artikel-aanvulling werkte alleen bij een run die helemaal afliep.** De ids werden
+tijdens de run in het geheugen verzameld en pas aan het eind opgehaald. Een onderbroken
+backfill — een time-out, een dichtgeklapte laptop — liet die ids verdampen, met
+aanbodregels die permanent naar een niet-opgehaalde naam wijzen. Nu leidt
+`findSupplyLinesWithoutTradeItem` de gaten af uit de database zelf, met een left join. Het
+gat is daarmee altijd zichtbaar en altijd te dichten, ongeacht hoeveel halve runs
+eraan voorafgingen. Los aan te roepen met `npm run backfill -- --items-only`.
+
 ## Vier dingen die anders liepen dan het plan zei
 
 Alle vier gevonden doordat subagents weigerden een tegenstrijdigheid glad te strijken.
