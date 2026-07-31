@@ -161,6 +161,39 @@ describe("syncSupplyLines", () => {
     expect(result.duplicatesCollapsed).toBe(3);
   });
 
+  it("stops without spinning when a non-empty page fails to advance the cursor", async () => {
+    // The sync endpoint returns rows at sequence numbers >= cursor, so the row at the
+    // cursor can always reappear. If it is the only row visible to us, the cursor never
+    // advances - this pins down that the loop stops instead of repeating the request forever.
+    const getJson = vi.fn().mockResolvedValueOnce(page([10], 999));
+
+    const result = await syncSupplyLines({
+      client: { getJson },
+      startCursor: 10n,
+      writePage: vi.fn(),
+      writeCursor: vi.fn(),
+      now: () => new Date(),
+    });
+
+    expect(getJson).toHaveBeenCalledTimes(1);
+    expect(result.warning).toMatch(/did not advance/i);
+    expect(result.reachedEnd).toBe(false);
+  });
+
+  it("uses the highest sequence number in a page, not the last row, as the new cursor", async () => {
+    const getJson = vi.fn().mockResolvedValueOnce(page([3, 1, 2], 3));
+
+    const result = await syncSupplyLines({
+      client: { getJson },
+      startCursor: 0n,
+      writePage: vi.fn().mockResolvedValue(written()),
+      writeCursor: vi.fn(),
+      now: () => new Date(),
+    });
+
+    expect(result.cursor).toBe(3n);
+  });
+
   it("rejects a response that does not match the schema", async () => {
     const getJson = vi.fn().mockResolvedValueOnce({ results: [{ nonsense: true }] });
 
