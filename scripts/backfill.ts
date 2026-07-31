@@ -98,13 +98,28 @@ async function closeTradeItemGaps(): Promise<number> {
 
   console.log(`  ${missing.length} referenced trade items not stored yet, fetching...`);
 
-  return fetchMissingTradeItems({
+  const added = await fetchMissingTradeItems({
     client: createCustomersClient(),
     tradeItemIds: missing,
     findKnownIds: findKnownTradeItemIds,
     saveTradeItems,
     now: () => new Date(),
   });
+
+  // A residue is normal and does not shrink on retry. Two causes seen against staging:
+  // a placeholder all-zero id that returns 404, and ids that return 403 because they
+  // belong to trade items this organisation has no rights to - customer-specific items
+  // of other buyers. Roughly 0.09% of referenced items. Reported rather than left silent,
+  // so a sudden jump is noticeable instead of looking like normal background noise.
+  const unavailable = missing.length - added;
+  if (unavailable > 0) {
+    console.log(
+      `  ${unavailable} could not be fetched (404 or 403 from Floriday) and will be` +
+        ` reported again on the next run`,
+    );
+  }
+
+  return added;
 }
 
 async function main(): Promise<void> {
