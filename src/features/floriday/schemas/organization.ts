@@ -33,3 +33,4 @@ export const organizationPageSchema = z.object({
 });
 
 export type OrganizationPayload = z.infer<typeof organizationSchema>;
+export type OrganizationPage = z.infer<typeof organizationPageSchema>;
