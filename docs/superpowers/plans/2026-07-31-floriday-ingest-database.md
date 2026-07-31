@@ -650,45 +650,71 @@ Drie verzoeken per seconde, met marge onder de limiet van 3,4.
 `tests/unit/rate-limiter.test.ts`:
 
 ```typescript
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRateLimiter } from "@/features/floriday/client/rate-limiter";
 
+beforeEach(() => { vi.useFakeTimers(); });
+afterEach(() => { vi.useRealTimers(); });
+
+/** Reports whether a promise has settled, without hanging if it has not. */
+async function hasSettled(promise: Promise<void>): Promise<boolean> {
+  let settled = false;
+  void promise.then(() => { settled = true; });
+  await vi.advanceTimersByTimeAsync(0);
+  return settled;
+}
+
 describe("createRateLimiter", () => {
-  it("lets the first requests through without waiting", async () => {
-    vi.useFakeTimers();
+  it("lets the first request through without waiting", async () => {
     const limiter = createRateLimiter({ requestsPerSecond: 3 });
-
-    const started = Date.now();
-    await limiter.acquire();
-    await limiter.acquire();
-    await limiter.acquire();
-
-    expect(Date.now() - started).toBe(0);
-    vi.useRealTimers();
+    expect(await hasSettled(limiter.acquire())).toBe(true);
   });
 
-  it("delays the fourth request by a third of a second", async () => {
-    vi.useFakeTimers();
+  it("spaces the next request by a third of a second", async () => {
     const limiter = createRateLimiter({ requestsPerSecond: 3 });
-
-    await limiter.acquire();
-    await limiter.acquire();
     await limiter.acquire();
 
-    const pending = limiter.acquire();
     let settled = false;
-    void pending.then(() => { settled = true; });
+    void limiter.acquire().then(() => { settled = true; });
 
     await vi.advanceTimersByTimeAsync(300);
     expect(settled).toBe(false);
 
     await vi.advanceTimersByTimeAsync(50);
     expect(settled).toBe(true);
+  });
 
-    vi.useRealTimers();
+  it("makes the delay cumulative across queued requests", async () => {
+    const limiter = createRateLimiter({ requestsPerSecond: 3 });
+    await limiter.acquire();
+
+    void limiter.acquire();
+    let thirdSettled = false;
+    void limiter.acquire().then(() => { thirdSettled = true; });
+
+    await vi.advanceTimersByTimeAsync(600);
+    expect(thirdSettled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(thirdSettled).toBe(true);
+  });
+
+  it("does not wait when enough time has already passed", async () => {
+    const limiter = createRateLimiter({ requestsPerSecond: 3 });
+    await limiter.acquire();
+
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await hasSettled(limiter.acquire())).toBe(true);
   });
 });
 ```
+
+Let op: dit limiteert door **gelijkmatig te spreiden**, niet door een burst toe te staan. Elk
+verzoek na het eerste wacht tot zijn eigen tijdslot, en die slots liggen 333 milliseconden
+uit elkaar. Dat is bewust: bij een burst van drie direct achter elkaar zit je in dezelfde
+seconde al op de rand van de limiet, en een backfill doet meer dan duizend verzoeken achter
+elkaar. Gelijkmatig spreiden houdt het tempo voorspelbaar.
 
 - [ ] **Stap 2: Draai de test om te zien dat hij faalt**
 
