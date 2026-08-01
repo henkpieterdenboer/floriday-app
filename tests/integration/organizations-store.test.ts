@@ -5,11 +5,17 @@ import { prisma } from "@/lib/db";
 import { organizationPageSchema } from "@/features/floriday/schemas/organization";
 import { toOrganizationRow } from "@/features/floriday/mappers/organization";
 import { writeOrganizationsPage } from "@/features/floriday/sync/organizations-store";
+import { toTestId } from "../helpers/test-ids";
 
 const page = organizationPageSchema.parse(
   JSON.parse(readFileSync("tests/fixtures/organizations.json", "utf8")),
 );
-const rows = page.results.map(toOrganizationRow);
+// The fixture is a real captured page, so organizationId is the primary key of a real
+// archive row. Convert it before it ever reaches the database so this test's writes and
+// cleanup can never touch (or delete) real data.
+const rows = page.results
+  .map(toOrganizationRow)
+  .map((row) => ({ ...row, organizationId: toTestId(row.organizationId) }));
 const ids = rows.map((r) => r.organizationId);
 
 async function cleanup(): Promise<void> {

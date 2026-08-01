@@ -5,11 +5,21 @@ import { prisma } from "@/lib/db";
 import { supplyPageSchema } from "@/features/floriday/schemas/supply-line";
 import { toSupplyLineRow } from "@/features/floriday/mappers/supply-line";
 import { writeSupplyPage } from "@/features/floriday/sync/write-supply-page";
+import { toTestId } from "../helpers/test-ids";
 
 const page = supplyPageSchema.parse(
   JSON.parse(readFileSync("tests/fixtures/supply-page.json", "utf8")),
 );
-const rows = page.results.map(toSupplyLineRow);
+// The fixture is a real captured page, so its supplyLineId values are the primary keys of
+// real archive rows. Only supplyLineId is converted here: SupplyLineVersion has a foreign
+// key to it, so both tables must agree on the same (converted) id or the insert fails.
+// tradeItemId and supplierOrganizationId are plain columns with no foreign key and nothing
+// in this file ever deletes by them, so they are left as the real fixture values - that
+// keeps the line's relationship to its (real, untouched) trade item and organization
+// realistic instead of pointing at a fabricated id.
+const rows = page.results
+  .map(toSupplyLineRow)
+  .map((row) => ({ ...row, supplyLineId: toTestId(row.supplyLineId) }));
 const ids = rows.map((r) => r.supplyLineId);
 
 async function cleanup(): Promise<void> {

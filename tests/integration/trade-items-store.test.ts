@@ -4,13 +4,19 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
 import { tradeItemSchema } from "@/features/floriday/schemas/trade-item";
 import { findKnownTradeItemIds, saveTradeItems } from "@/features/floriday/sync/trade-items-store";
+import { toTestId } from "../helpers/test-ids";
 
+// The fixture is a real captured page, so tradeItemId is the primary key of a real
+// archive row. Convert it before it ever reaches the database so this test's writes and
+// cleanup can never touch (or delete) real data. supplierOrganizationId is a plain column
+// with no foreign key and nothing here deletes by it, so it is left as the real fixture
+// value to keep the item's relationship to its (real, untouched) organization realistic.
 const items = tradeItemSchema.array().parse(
   JSON.parse(readFileSync("tests/fixtures/trade-items.json", "utf8")),
-);
+).map((item) => ({ ...item, tradeItemId: toTestId(item.tradeItemId) }));
 const ids = items.map((i) => i.tradeItemId);
 
-const nullJsonId = "00000000-0000-4000-8000-000000000099";
+const nullJsonId = toTestId("00000000-0000-4000-8000-000000000099");
 
 async function cleanup(): Promise<void> {
   await prisma.tradeItem.deleteMany({ where: { tradeItemId: { in: [...ids, nullJsonId] } } });
