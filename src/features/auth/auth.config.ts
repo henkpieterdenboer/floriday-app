@@ -28,6 +28,13 @@ export const authConfig: NextAuthConfig = {
     : [],
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
+  // Auth.js weigert requests van een host die het niet vertrouwt tenzij AUTH_URL,
+  // AUTH_TRUST_HOST of VERCEL (automatisch gezet op Vercel) aanwezig is. Op Vercel is dat
+  // dus geen probleem, maar `next start` lokaal en elke andere hosting draaien zonder die
+  // vars in NODE_ENV=production tegen een keiharde "UntrustedHost"-fout aan. De host wordt
+  // hier al bewaakt via APP_URL (verplicht in env.ts) en de losstaande CRON_SECRET-check op
+  // de cron-routes, dus vertrouwen op de Host-header voegt geen nieuw risico toe.
+  trustHost: true,
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
