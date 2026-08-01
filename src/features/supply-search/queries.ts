@@ -34,7 +34,11 @@ function escapeLikeTerm(term: string): string {
   return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
-const FROM_JOIN = Prisma.sql`
+/**
+ * Shared with summary.ts, so a group's aggregates and the line list agree on exactly which
+ * rows exist to aggregate in the first place.
+ */
+export const FROM_JOIN = Prisma.sql`
   FROM "SupplyLine" sl
   LEFT JOIN "TradeItem" ti ON ti."tradeItemId" = sl."tradeItemId"
   LEFT JOIN "Organization" o ON o."organizationId" = sl."supplierOrganizationId"
