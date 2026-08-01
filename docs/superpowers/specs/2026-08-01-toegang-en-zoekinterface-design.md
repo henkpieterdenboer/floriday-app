@@ -147,10 +147,12 @@ model Invitation {
 }
 ```
 
-`passwordHash` is nullable: tussen uitnodigen en het instellen van een wachtwoord bestaat
-het account al zonder er een te hebben. In de database staat alleen de **hash** van het
-uitnodigingstoken, nooit het token zelf — wie de database inziet mag daarmee geen
-uitnodiging kunnen inwisselen.
+`passwordHash` is nullable, en dat blijft het mogelijk voorgoed: wie zich uitsluitend via
+Entra aanmeldt krijgt nooit een wachtwoord. Het veld zegt dus niet of een account bruikbaar
+is — dat doen `isActive` en het bestaan van het account zelf.
+
+In de database staat alleen de **hash** van het uitnodigingstoken, nooit het token zelf. Wie
+de database inziet mag daarmee geen uitnodiging kunnen inwisselen.
 
 ### Inloggen
 
@@ -161,15 +163,44 @@ omgevingsvariabelen aanwezig zijn. Ontbreken die, dan verschijnt de knop niet. E
 aanzetten is straks dus configuratie, geen verbouwing.
 
 **Bij aanmelden via Entra koppelen we uitsluitend op e-mailadres, en alleen op een account
-dat al bestaat en actief is.** SSO geeft toegang tot bestaande accounts en maakt er nooit
-zelf een aan. Zonder die regel kan iedereen met een werkmailadres binnenlopen zodra de
-koppeling live gaat.
+dat een beheerder heeft aangemaakt en niet heeft gedeactiveerd.** SSO geeft toegang tot
+bestaande accounts en maakt er nooit zelf een aan. Zonder die regel kan iedereen met een
+werkmailadres binnenlopen zodra de koppeling live gaat.
+
+Of dat account al een wachtwoord heeft, doet daarbij niet ter zake. Iemand die is
+uitgenodigd maar nog nooit heeft ingelogd, mag zich meteen via Entra aanmelden — dat is
+zelfs de kortste route, want dan hoeft er nooit een wachtwoord te bestaan. De uitnodiging
+blijft ongebruikt en verloopt vanzelf.
+
+Twee voorwaarden bij die aanmelding, en beide zijn nodig:
+
+- Het e-mailadres van het Entra-account moet **exact** overeenkomen met dat van het
+  aangemaakte account. Vergelijking gebeurt genormaliseerd op kleine letters.
+- De provider moet het e-mailadres als geverifieerd aanleveren. Bij Entra-werkaccounts is
+  dat zo, maar erop vertrouwen zonder te controleren is precies het soort aanname dat later
+  stilletjes onjuist wordt.
+
+### Twee wegen naar een werkend account
+
+Een aangemaakt account is nog niet in gebruik genomen. Dat kan langs twee kanten gebeuren,
+en welke van de twee maakt niet uit:
+
+1. **Via de uitnodigingslink** — de gebruiker kiest een wachtwoord. Het token wordt daarbij
+   als gebruikt gemarkeerd en werkt daarna niet meer.
+2. **Via Entra** — de gebruiker klikt op de aanmeldknop, met of zonder de uitnodigingsmail
+   te openen. Er komt geen wachtwoord aan te pas.
+
+De uitnodigingsmail biedt daarom beide: een knop om een wachtwoord in te stellen, en
+daarnaast de mededeling dat aanmelden met het werkaccount ook kan zodra Entra actief is.
+
+Wie via Entra binnenkwam heeft geen wachtwoord. Valt Entra ooit weg, dan kan een beheerder
+een nieuwe uitnodiging sturen zodat er alsnog een wachtwoord ingesteld wordt. Er is dus geen
+situatie waarin iemand permanent buitengesloten raakt.
 
 ### Gebruikersbeheer
 
 Geen zelfregistratie. Een beheerder voert naam en e-mailadres in; het systeem maakt het
 account aan en verstuurt een uitnodiging met een eenmalige link die na zeven dagen verloopt.
-Bij het instellen van het wachtwoord wordt het token als gebruikt gemarkeerd.
 
 Een beheerder kan een account deactiveren. Dat blokkeert zowel wachtwoord- als
 Entra-aanmelding, en is te verkiezen boven verwijderen omdat het bij een audit navolgbaar
@@ -292,6 +323,18 @@ en dat een samenvatting optelt tot hetzelfde totaal als de regels eronder.
 **Toegang.** Dat de middleware zonder geldige sessie weigert, dat een uitnodigingstoken maar
 één keer werkt en na verloop niet meer, dat een gedeactiveerde gebruiker niet binnenkomt, en
 dat een `VIEWER` het beheerscherm niet kan openen.
+
+Voor de Entra-koppeling in het bijzonder, want daar zit de scherpste rand:
+
+- Een aanmelding met een e-mailadres waarvoor geen account bestaat wordt geweigerd, en er
+  wordt er ook geen aangemaakt.
+- Een aanmelding op een gedeactiveerd account wordt geweigerd.
+- Een aanmelding op een account dat wel bestaat maar nog geen wachtwoord heeft, slaagt —
+  dat is het pad waarlangs iemand zijn account in gebruik neemt zonder ooit een wachtwoord
+  te kiezen.
+- Een aanmelding waarbij de provider het e-mailadres niet als geverifieerd aanlevert wordt
+  geweigerd.
+- Vergelijking van e-mailadressen gebeurt hoofdletterongevoelig.
 
 ## 9. Randvoorwaarden
 
