@@ -9,6 +9,28 @@ export const envSchema = z.object({
   FLORIDAY_CUSTOMERS_CLIENT_SECRET: z.string().min(1),
   FLORIDAY_CUSTOMERS_API_KEY: z.string().min(1),
   CRON_SECRET: z.string().min(1),
+
+  APP_URL: z.string().url(),
+
+  // E-mail. Ontbreken deze, dan valt de applicatie terug op Ethereal en wordt er niets
+  // echt verstuurd - dat is wat je wilt tijdens ontwikkelen.
+  SMTP_HOST: z.string().optional(),
+  // Lege string wordt anders door z.coerce.number() als 0 gelezen in plaats van "niet
+  // opgegeven" - dat maskeert een half ingevulde SMTP-configuratie.
+  SMTP_PORT: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().optional(),
+  ),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  MAIL_FROM: z.string().optional(),
+
+  // Entra. Ontbreken deze, dan verschijnt de aanmeldknop niet.
+  AZURE_AD_CLIENT_ID: z.string().optional(),
+  AZURE_AD_CLIENT_SECRET: z.string().optional(),
+  AZURE_AD_TENANT_ID: z.string().optional(),
+
+  NEXTAUTH_SECRET: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -10,6 +10,8 @@ const valid = {
   FLORIDAY_CUSTOMERS_CLIENT_SECRET: "secret",
   FLORIDAY_CUSTOMERS_API_KEY: "key",
   CRON_SECRET: "cron",
+  APP_URL: "http://localhost:3000",
+  NEXTAUTH_SECRET: "secret",
 };
 
 describe("envSchema", () => {
@@ -26,6 +28,23 @@ describe("envSchema", () => {
   it("rejects an api base url that is not a url", () => {
     expect(() => envSchema.parse({ ...valid, FLORIDAY_CUSTOMERS_API_BASE_URL: "nope" }))
       .toThrow();
+  });
+
+  it("treats a missing SMTP_PORT as unset", () => {
+    const result = envSchema.parse(valid);
+    expect(result.SMTP_PORT).toBeUndefined();
+  });
+
+  it("treats an empty SMTP_PORT as unset rather than coercing it to zero", () => {
+    // z.coerce.number() reads "" as 0, which would silently produce a broken port instead
+    // of the "not configured" state a blank .env value is meant to express.
+    const result = envSchema.parse({ ...valid, SMTP_PORT: "" });
+    expect(result.SMTP_PORT).toBeUndefined();
+  });
+
+  it("coerces a numeric SMTP_PORT string", () => {
+    const result = envSchema.parse({ ...valid, SMTP_PORT: "587" });
+    expect(result.SMTP_PORT).toBe(587);
   });
 });
 

@@ -22,12 +22,14 @@
     "@prisma/adapter-neon": "^6.19.3",
     "@prisma/client": "^6.19.3",
     "next": "^16.2.12",
+    "nodemailer": "^9.0.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "dotenv": "^17.4.2",

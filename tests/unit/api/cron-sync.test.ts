@@ -18,6 +18,8 @@ const validEnv = {
   FLORIDAY_CUSTOMERS_CLIENT_SECRET: "secret",
   FLORIDAY_CUSTOMERS_API_KEY: "key",
   CRON_SECRET: "the-real-secret",
+  APP_URL: "http://localhost:3000",
+  NEXTAUTH_SECRET: "secret",
 };
 
 function request(authorization?: string): Request {
