@@ -180,6 +180,25 @@ Twee voorwaarden bij die aanmelding, en beide zijn nodig:
   dat zo, maar erop vertrouwen zonder te controleren is precies het soort aanname dat later
   stilletjes onjuist wordt.
 
+> **Gecorrigeerd tijdens de bouw.** Die tweede eis is als `profile.email_verified === true`
+> geïmplementeerd, en dat veld **bestaat niet in Entra**. Uit het profieltype van de
+> provider blijkt dat Entra `xms_edov` levert (of de tenant nu domeineigendom heeft
+> aangetoond, wat iets anders is dan een geverifieerd gebruikersadres) en
+> `verified_primary_email`. Zoals het er nu staat weigert elke Entra-aanmelding met
+> `email-not-verified`.
+>
+> Dat faalt de goede kant op — niemand komt ten onrechte binnen — maar het is niet de
+> bedoelde regel, en Entra werkt zo dus niet zodra het aangezet wordt.
+>
+> Wat er in plaats daarvan moet komen: bij een werkaccount ligt de verificatie niet bij een
+> los claimveld maar bij de **tenant**. Een account in de tenant van Coloriginz is per
+> definitie een beheerd account met een adres dat de organisatie zelf uitgeeft. De juiste
+> controle is daarom dat de `tid` in het token overeenkomt met de eigen tenant-id, en dat
+> `AZURE_AD_TENANT_ID` dus niet op `common` staat maar op de tenant zelf.
+>
+> Dat is niet te bouwen of te testen zonder een geconfigureerde tenant. Het staat als
+> uitdrukkelijke TODO in `auth-config.ts` en als openstaand punt hieronder.
+
 ### Twee wegen naar een werkend account
 
 Een aangemaakt account is nog niet in gebruik genomen. Dat kan langs twee kanten gebeuren,
@@ -350,7 +369,8 @@ Voor de Entra-koppeling in het bijzonder, want daar zit de scherpste rand:
 ### Openstaande punten
 
 1. **Entra.** De koppeling moet nog ingericht worden. Tot die tijd blijft de knop
-   onzichtbaar; er is verder niets aan te bouwen.
+   onzichtbaar. Let op: de verificatiecontrole moet daarbij van `email_verified` naar de
+   tenant-id, zie het kader in §4 — zoals het nu staat zou elke Entra-aanmelding weigeren.
 2. **De preset "komende drie dagen".** Onderbouwd met data, maar te valideren met een
    inkoper. Kan daarna verschuiven.
 3. **Neon in slaap.** Wordt nu opgevangen in het scherm. Als het storend blijkt, is de
