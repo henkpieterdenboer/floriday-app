@@ -132,4 +132,50 @@ describe("GET /api/cron/sync", () => {
     expect(body.error).toMatch(/CRON_SECRET/);
     expect(runSupplySyncMock).not.toHaveBeenCalled();
   });
+
+  // Een omgeving die nog wacht op Floriday-gegevens hoort niet elk uur te falen alsof er
+  // iets kapot is. Zonder deze schakelaar liep de productie-cron zeven keer op een
+  // invalid_client van de tokenserver voordat iemand het zag.
+  it("skips the run entirely when SYNC_ENABLED is false", async () => {
+    resetEnvCache();
+    process.env = { ...process.env, ...validEnv, SYNC_ENABLED: "false" };
+
+    const response = await GET(request("Bearer the-real-secret"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.skipped).toBe(true);
+    expect(body.reason).toMatch(/SYNC_ENABLED/);
+    expect(runSupplySyncMock).not.toHaveBeenCalled();
+  });
+
+  it("still refuses a wrong secret when the sync is switched off", async () => {
+    resetEnvCache();
+    process.env = { ...process.env, ...validEnv, SYNC_ENABLED: "false" };
+
+    const response = await GET(request("Bearer wrong"));
+
+    expect(response.status).toBe(401);
+    expect(runSupplySyncMock).not.toHaveBeenCalled();
+  });
+
+  it("runs normally when SYNC_ENABLED is absent", async () => {
+    resetEnvCache();
+    process.env = { ...process.env, ...validEnv };
+    delete process.env.SYNC_ENABLED;
+    runSupplySyncMock.mockResolvedValue({
+      pagesProcessed: 1,
+      rowsProcessed: 10,
+      versionsAdded: 10,
+      duplicatesCollapsed: 0,
+      tradeItemsAdded: 0,
+      cursor: 5n,
+      reachedEnd: true,
+    });
+
+    const response = await GET(request("Bearer the-real-secret"));
+
+    expect(response.status).toBe(200);
+    expect(runSupplySyncMock).toHaveBeenCalled();
+  });
 });

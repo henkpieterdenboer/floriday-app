@@ -10,6 +10,11 @@ export const envSchema = z.object({
   FLORIDAY_CUSTOMERS_API_KEY: z.string().min(1),
   CRON_SECRET: z.string().min(1),
 
+  // Zet op "false" om de uurlijkse synchronisatie stil te leggen. Bedoeld voor een omgeving
+  // die nog wacht op Floriday-gegevens: die hoort niet elk uur te falen alsof er iets kapot
+  // is. Afwezig of iets anders dan "false" betekent aan.
+  SYNC_ENABLED: z.string().optional(),
+
   APP_URL: z.string().url(),
 
   // E-mail. Ontbreken deze, dan valt de applicatie terug op Ethereal en wordt er niets

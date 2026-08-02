@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { runOrganizationSync } from "@/features/floriday/sync/run-organization-sync";
+import { SYNC_DISABLED_MESSAGE, isSyncEnabled } from "@/features/floriday/sync-enabled";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -20,6 +21,12 @@ export async function GET(request: Request): Promise<NextResponse> {
     const expected = `Bearer ${getEnv().CRON_SECRET}`;
     if (request.headers.get("authorization") !== expected) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // Zie de sync-route: een omgeving die nog wacht op gegevens hoort geen mislukte run
+    // te loggen.
+    if (!isSyncEnabled()) {
+      return NextResponse.json({ skipped: true, reason: SYNC_DISABLED_MESSAGE });
     }
 
     const result = await runOrganizationSync({ trigger: "CRON", maxPages: MAX_PAGES_PER_RUN });
