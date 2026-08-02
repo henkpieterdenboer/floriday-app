@@ -59,6 +59,23 @@ Artikelen hebben geen bruikbare sync: `/trade-items/sync` geeft `403 There are n
 connected suppliers`. Ophalen per ID werkt wel, en welke ontbreken wordt uit de database
 afgeleid, niet uit wat een run toevallig in het geheugen had.
 
+## Het zoekscherm
+
+`/aanbod` (achter inloggen) doorzoekt het gearchiveerde klokvoorverkoop-aanbod: datumpresets
+met hun concrete bereik erbij, een vrij zoekveld (artikel, kweker of partijbrief), een
+locatiekeuze en een "alleen beschikbaar"-schakelaar. Alles staat in de URL, dus een selectie
+is deelbaar en de terugknop werkt.
+
+Twee standen op dezelfde data: **regels** (TanStack Table, vijftig per pagina, sorteren en
+pagineren via de database) en **samenvatting** (per tijdvak, kweker, artikel of veillocatie,
+met een totaalregel). Klikken op een samenvattingsregel zet die groep als extra filter en
+schakelt terug naar de regels.
+
+De database filtert, sorteert en pagineert — het scherm laadt nooit meer dan een venster van
+vijftig rijen tegelijk, ook niet bij een half miljoen regels in de archieftabel. Zie
+`src/features/supply-search/` voor de pure logica (presets, filters, sorteerwhitelist,
+queries, samenvatting) en `src/app/(protected)/aanbod/` voor het scherm zelf.
+
 ## Let op: `prisma db push` werkt hier niet
 
 Uitgaand TCP **5432 is geblokkeerd** op dit netwerk, dus de Prisma schema engine bereikt

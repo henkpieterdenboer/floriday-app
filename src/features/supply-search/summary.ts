@@ -2,9 +2,14 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { buildWhereClause, FROM_JOIN } from "@/features/supply-search/queries";
 import type { SearchFilters } from "@/features/supply-search/filters";
+import {
+  UNKNOWN_ARTICLE_LABEL,
+  type PeriodGranularity,
+  type SummaryAxis,
+} from "@/features/supply-search/summary-types";
 
-export type SummaryAxis = "period" | "grower" | "article" | "location";
-export type PeriodGranularity = "day" | "week" | "month";
+export type { PeriodGranularity, SummaryAxis } from "@/features/supply-search/summary-types";
+export { UNKNOWN_ARTICLE_LABEL } from "@/features/supply-search/summary-types";
 
 export interface SummaryGroup {
   key: string;
@@ -129,8 +134,8 @@ async function summarizeByArticle(filters: SearchFilters): Promise<SummaryGroup[
   // in the same "(onbekend artikel)" group instead of two visually-identical ones.
   const rows = await prisma.$queryRaw<RawGroupRow[]>(Prisma.sql`
     SELECT
-      COALESCE(NULLIF(ti.name, ''), '(onbekend artikel)') AS key,
-      COALESCE(NULLIF(ti.name, ''), '(onbekend artikel)') AS label,
+      COALESCE(NULLIF(ti.name, ''), ${UNKNOWN_ARTICLE_LABEL}) AS key,
+      COALESCE(NULLIF(ti.name, ''), ${UNKNOWN_ARTICLE_LABEL}) AS label,
       ${AGGREGATES}
     ${FROM_JOIN}
     WHERE ${where}

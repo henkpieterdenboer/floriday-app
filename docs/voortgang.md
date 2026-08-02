@@ -122,6 +122,107 @@ onderbouwd met cijfers uit de gevulde database. De drie die het zwaarst wegen:
 **Volgende deelprojecten**
 
 - **B — zoekinterface.** Een grid dat serverside filtert, sorteert en pagineert. Bij een
-  half miljoen rijen doet Postgres het werk en toont het grid een klein venster.
+  half miljoen rijen doet Postgres het werk en toont het grid een klein venster. Zie
+  hieronder — inmiddels opgeleverd.
 - **C — distributie.** De dagelijkse doorgifte naar de interne informatievoorziening. Waar
   die data heen moet is nog niet bepaald.
+
+---
+
+# Voortgang deelproject B — toegang en zoekinterface
+
+Bijgewerkt: 2 augustus 2026.
+
+Plan: `docs/superpowers/plans/2026-08-01-zoekscherm.md`
+Spec: `docs/superpowers/specs/2026-08-01-toegang-en-zoekinterface-design.md`
+
+## Waar we staan
+
+**Fase 1 (toegang)** was al opgeleverd voor dit werk begon: inloggen met e-mailadres en
+wachtwoord (NextAuth, JWT, argon2id), gebruikersbeheer met uitnodiging per e-mail, en de
+middleware die `/aanbod` en `/beheer/gebruikers` afschermt. Entra staat voorbereid maar uit
+(zie de spec, §4, voor de openstaande tenant-controle).
+
+**Fase 2 (het zoekscherm) is nu af.** Alle zes taken uit het plan: datumpresets, filters en
+sortering, de regelquery, de samenvatting over vier assen, en het scherm zelf. 315 tests
+groen (285 + 30 nieuwe, allemaal puur/unit — de integratietests van taak 3 en 4 waren al
+groen), typecheck schoon, productiebuild slaagt.
+
+Het scherm zelf leunt op drie server components die rechtstreeks bevragen
+(`page.tsx`, `freshness.tsx`) en client components die alleen tonen wat ze al hebben
+(`filter-bar.tsx`, `supply-table.tsx`) — nergens wordt dezelfde data twee keer opgehaald.
+Sorteren, pagineren en het wisselen tussen regels/samenvatting lopen allemaal via de URL naar
+de database, nooit in de browser.
+
+## Wat er anders liep dan het plan
+
+Het plan gaf de kant-en-klare interfaces voor `filters.ts`, `queries.ts`, `sort.ts`, `date-
+presets.ts` en `summary.ts` als vaststaand mee ("alles wat eronder ligt is af en getest").
+Die klopten. Wat niet in het plan stond, en er tijdens het bouwen bij moest:
+
+1. **Geen `useSearchParams()` gebruikt, nergens.** De App Router eist daar een Suspense-
+   boundary voor. In plaats daarvan leest alleen `page.tsx` (server component) de URL en
+   geeft `filters`/`view` als props door aan de client components. Die navigeren met
+   `<Link>` of `router.push`, maar lezen de URL nooit zelf. Voordeel naast het vermijden van
+   de Suspense-eis: geen enkele client component hoeft zijn eigen databron te verzinnen.
+2. **`view`/`axis`/`granularity` horen niet bij `SearchFilters`.** Dat type ligt vast (taak
+   2, al getest). Screen-only state kreeg een eigen puur module,
+   `src/features/supply-search/view.ts`, met `parseView`/`buildHref`/`drillDownFilters` -
+   dezelfde spiegel-garantie (URL erin, object eruit, en weer terug) als `filters.ts` zelf.
+3. **`summary.ts` importeren vanuit een client component was een architectuurfout in
+   wording.** `view.ts` heeft de as-typen en de `UNKNOWN_ARTICLE_LABEL`-constante nodig, ook
+   in `filter-bar.tsx` (client). Een gewone import vanuit `summary.ts` had Prisma via
+   `queries.ts` in de clientbundel getrokken. Opgelost met een derde, afhankelijkheidsvrij
+   bestand, `summary-types.ts`, waar zowel `summary.ts` als `view.ts` uit putten.
+4. **Doorklikken vanuit de samenvatting op kweker/artikel gaat via het vrije zoekveld, niet
+   via een eigen filter.** `SearchFilters` heeft geen apart kweker- of artikel-ID-filter
+   (bewust, per de gegeven contractlijst) - de spec noemt kweker/artikel wel als aparte
+   filters in §5, maar de enige weg die er in de praktijk voor gebouwd is, is vrij zoeken op
+   naam. Een groep waarvan het label op de id terugvalt (geen echte naam - 34.461 van de
+   67.342 organisaties heten leeg) is daarom expres **niet** doorklikbaar: zoeken op een
+   ruwe UUID levert nul regels op, en dat zou eruitzien als een bug in plaats van als
+   "geen naam bekend". `isDrillableGroup` in `view.ts` regelt dat.
+5. **Een echte databug, gevonden door te kijken, niet door te redeneren.** De eerste versie
+   van de partijbrief-kolom deed `waarde ?? "-"`. In de browser bleek een groot deel van de
+   rijen een lege partijbrief-cel te tonen in plaats van een streepje. Query: 46.731 van de
+   525.458 regels hebben `deliveryNoteReference = ''`, **nooit** `NULL` - exact dezelfde
+   valkuil als de lege organisatienaam die taak 4 al blootlegde, hier op een veld waar hij
+   niet gedocumenteerd stond. `??` ving dat niet af (het reageert alleen op `null`/
+   `undefined`); een waarheidscontrole (`value ? value : "-"`) wel.
+
+## Verificatie
+
+Handmatig gecontroleerd in de browser (Chrome, tegen de gevulde staging-database):
+
+- Elke preset toont het juiste concrete bereik en filtert ook echt (gecontroleerd voor
+  "Komende 3 dagen", "Dit jaar" en "Zelf kiezen").
+- Vrij zoeken op een artikelnaam ("Rosa Avalanche") geeft alleen treffers met die naam,
+  gedebounced, URL bijgewerkt.
+- Pagineren werkt en de URL verandert mee (`page=1` → `page=2`, geen overlap).
+- Samenvatting per week over "Dit jaar": het totaal (107.158) is exact gelijk aan het
+  regeltotaal voor dezelfde filters.
+- Doorklikken vanuit een tijdvak-groep (17.864 regels, week van 6 april) zet het bereik op
+  precies die week en toont exact 17.864 regels terug. Doorklikken op een kweker-groep
+  (Fa G.C. Kuipers, 12.242 regels) idem via het zoekveld.
+- Een selectie zonder resultaten (verzonnen zoekterm + EELDE + alleen-beschikbaar) toont de
+  actieve filters in woorden en vier specifieke verruim-links; "Wis alle filters" werkt.
+- Een regel zonder artikelnaam toont het `tradeItemId` gedempt en cursief in plaats van een
+  lege cel (geverifieerd op een echte regel uit 12 nov 2025, Plantion).
+- Een URL delen (rechtstreeks navigeren naar een opgebouwde link met preset, locatie,
+  zoekterm, sortering en pagina) reproduceert exact dezelfde selectie.
+
+Twee schermafbeeldingen staan in `docs/screenshots/` (regels en samenvatting).
+
+## Wat nog openstaat
+
+- **De "komende drie dagen"-preset valideren met een inkoper** (spec, open punt 2) - nog
+  niet gebeurd, staat los van dit werk.
+- **Neon-koude-start-melding is niet met een echte trage query getest.** De timer
+  (`WakingUpNotice`, drie seconden) is functioneel geverifieerd door code en door het
+  laadscherm te zien verschijnen bij navigatie, maar een koude start van vijf-plus-minuten
+  stilte was in deze sessie niet te forceren.
+- **Entra-koppeling** (spec, open punt 1) - ongewijzigd, blijft uitgeschakeld tot de
+  tenant-id-controle er is.
+- **Kweker/artikel als eigen filter** (los van vrij zoeken) stond in de spec als
+  mogelijkheid maar niet in de gegeven contractlijst voor dit scherm - zou een uitbreiding
+  van `SearchFilters` en de query-laag vergen, bewust buiten deze taak gelaten.
