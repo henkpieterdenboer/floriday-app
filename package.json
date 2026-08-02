@@ -15,7 +15,8 @@
     "capture-fixtures": "tsx scripts/capture-fixtures.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "db:push": "node scripts/db-push.mjs",
-    "db:push:dry": "node scripts/db-push.mjs --dry-run"
+    "db:push:dry": "node scripts/db-push.mjs --dry-run",
+    "invite": "tsx scripts/invite.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
