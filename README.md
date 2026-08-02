@@ -76,6 +76,36 @@ vijftig rijen tegelijk, ook niet bij een half miljoen regels in de archieftabel.
 `src/features/supply-search/` voor de pure logica (presets, filters, sorteerwhitelist,
 queries, samenvatting) en `src/app/(protected)/aanbod/` voor het scherm zelf.
 
+## Toegang
+
+Er is geen zelfregistratie. De allereerste beheerder maak je met een script:
+
+```bash
+npm run create-admin -- --email jij@bedrijf.nl --naam "Jouw Naam"
+```
+
+Dat print de uitnodigings-URL op de terminal — bewust, want bij de eerste beheerder is er
+nog geen werkende mailconfiguratie. Daarna nodigt een beheerder collega's uit via
+`/beheer/gebruikers`.
+
+Een uitgenodigd account kan op twee manieren in gebruik genomen worden: via de link in de
+mail een wachtwoord instellen, of straks direct aanmelden met het werkaccount. In dat
+tweede geval bestaat er nooit een wachtwoord.
+
+**E-mail.** Zonder `SMTP_*` in `.env` gaat alles via Ethereal: er wordt niets echt
+verstuurd, maar elke mail is via een preview-link te bekijken. Die link verschijnt op het
+scherm na het uitnodigen en op de terminal bij `create-admin`. Voor productie zet je de
+`SMTP_*`-variabelen (Resend).
+
+**Microsoft Entra** staat voorbereid maar uit. Zonder `AZURE_AD_CLIENT_ID`,
+`AZURE_AD_CLIENT_SECRET` en `AZURE_AD_TENANT_ID` verschijnt de aanmeldknop niet. Let op
+voordat je het aanzet: de verificatiecontrole moet nog van `email_verified` naar de
+tenant-id — dat claimveld blijkt in Entra niet te bestaan, waardoor elke aanmelding nu zou
+weigeren. Zie de spec, §4.
+
+Aanmelden via Entra koppelt alleen op accounts die al bestaan en niet gedeactiveerd zijn;
+er wordt er nooit een aangemaakt.
+
 ## Let op: `prisma db push` werkt hier niet
 
 Uitgaand TCP **5432 is geblokkeerd** op dit netwerk, dus de Prisma schema engine bereikt

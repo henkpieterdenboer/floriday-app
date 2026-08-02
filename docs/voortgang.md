@@ -213,6 +213,26 @@ Handmatig gecontroleerd in de browser (Chrome, tegen de gevulde staging-database
 
 Twee schermafbeeldingen staan in `docs/screenshots/` (regels en samenvatting).
 
+## Een terugkerend patroon in de Floriday-data: lege strings
+
+Drie keer in dit deelproject bleek een veld niet leeg te zijn maar een **lege string** te
+bevatten, waar `null` verwacht werd. Elke keer gevonden door naar echte data te kijken, niet
+door te redeneren:
+
+- **34.461 van de 67.342 organisaties** hebben `name = ''`. Een `COALESCE(name, ...)` liet
+  daardoor lege labels in de samenvatting staan; `NULLIF(name, '')` was nodig.
+- **46.731 van de 525.458 aanbodregels** hebben `deliveryNoteReference = ''`, en nooit
+  `NULL`. De kolom gebruikte `waarde ?? "-"`, wat lege cellen opleverde in plaats van een
+  streepje.
+- Drie artikelen hebben eveneens een lege naam.
+
+Wie hier een nieuw veld toevoegt: ga er niet van uit dat ontbrekend `null` betekent. Kijk
+eerst naar de werkelijke verdeling.
+
+En één die geen lege string was maar wel dezelfde les: **349 aanbodregels hebben een
+negatief aantal stuks**, tot −98.200, allemaal `UNAVAILABLE` — vermoedelijk correcties in
+de feed. Opmaak mag dus niet aannemen dat aantallen positief zijn.
+
 ## Wat nog openstaat
 
 - **De "komende drie dagen"-preset valideren met een inkoper** (spec, open punt 2) - nog
