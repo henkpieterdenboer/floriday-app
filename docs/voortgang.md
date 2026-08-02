@@ -246,3 +246,55 @@ de feed. Opmaak mag dus niet aannemen dat aantallen positief zijn.
 - **Kweker/artikel als eigen filter** (los van vrij zoeken) stond in de spec als
   mogelijkheid maar niet in de gegeven contractlijst voor dit scherm - zou een uitbreiding
   van `SearchFilters` en de query-laag vergen, bewust buiten deze taak gelaten.
+
+---
+
+# Uitrol naar Vercel
+
+Bijgewerkt: 2 augustus 2026.
+
+## Wat er is ingericht
+
+Een tweede Neon-project voor productie (`floriday-middleware-prod`, Frankfurt), met een
+schema dat regel voor regel gelijk is aan test: 108 kolommen, 25 indexen. Leeg, want er
+zijn nog geen Floriday-productiecredentials.
+
+De repository staat op GitHub (`henkpieterdenboer/floriday-app`) met twee branches:
+`develop` voor Preview tegen de testdatabase, `main` voor Production tegen de nieuwe.
+
+## Wat er onderweg misging
+
+**Client secrets stonden in een gecommit document.** `docs/inventarisatie.md` bevatte de
+echte client secrets van beide Floriday staging-omgevingen, letterlijk uitgeschreven, vanaf
+de allereerste commit. Gevonden bij een scan vlak vóór de eerste push. De historie is
+herschreven zodat ze in geen van de 65 commits meer voorkomen; gecontroleerd door elke
+commit af te lopen. De secrets hebben nooit buiten de eigen machine gestaan.
+
+Les: scan vóór de eerste push, niet erna. Daarna is het niet meer terug te draaien.
+
+**`DOTENV_CONFIG_PATH` werkt niet.** Dat is de standaardmanier om een script tegen een
+andere omgeving te draaien, en het werd bijna aangeraden. Bij het uitproberen bleek de
+geïnstalleerde dotenv-versie de variabele stilzwijgend te negeren: hij laadt gewoon `.env`
+en meldt niets. Een backfill die je dénkt tegen productie te draaien had dan staging-data in
+de productiedatabase gezet.
+
+Opgelost met een expliciete `--env`-vlag én een regel op het scherm met de doeldatabase,
+vóór elk script iets doet.
+
+**De homepage was nooit vervangen.** Wie de gedeployde URL opende kreeg een kale
+placeholderpagina uit de allereerste opzet. Stuurt nu door naar `/aanbod`, waarna de
+middleware zo nodig naar `/login` leidt.
+
+**Het wachtwoord van de enige beheerder was onbekend.** Ingesteld door een subagent tijdens
+zijn browsercontrole en niet doorgegeven. Daar is nu `npm run invite` voor, die een verse
+uitnodigingslink maakt voor een bestaand account — nodig zodra hetzelfde op productie
+gebeurt.
+
+## Wat er nog moet
+
+1. `APP_URL` in Vercel per omgeving invullen; zonder de juiste waarde wijzen
+   uitnodigingslinks naar de verkeerde plek.
+2. Floriday-productiecredentials en API-key aanvragen bij Royal FloraHolland.
+3. Die invullen in `.env.lokaal-productie` en in Vercel bij Production.
+4. `npm run create-admin -- --env .env.lokaal-productie` draaien.
+5. Pas dán de backfill tegen productie.

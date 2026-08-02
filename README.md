@@ -22,16 +22,44 @@ npm test
 
 | Commando | Wat het doet |
 |---|---|
+| `npm run dev` | Start de app met webpack. |
+| `npm test` | Alles: unit- én integratietests (die laatste raken Neon). |
+| `npm run test:unit` | Alleen de snelle tests, zonder netwerk. |
 | `npm run backfill` | Eenmalige inhaalslag vanaf sequencenummer nul. Hervatbaar. |
 | `npm run backfill -- --pages 5` | Stopt na vijf pagina's. Voor een eerste proef. |
 | `npm run backfill -- --reset` | Zet de cursor terug op nul. |
 | `npm run backfill -- --items-only` | Dicht alleen de gaten in de artikeltabel. |
-| `npm run capture-fixtures` | Vernieuwt de testinvoer in `tests/fixtures/`. |
-| `npm test` | Alles: unit- én integratietests (die laatste raken Neon). |
-| `npm run test:unit` | Alleen de snelle tests, zonder netwerk. |
+| `npm run create-admin -- --email ... --naam "..."` | Maakt een beheerder en drukt de uitnodigingslink af. |
+| `npm run invite -- --email ... --url https://...` | Nieuwe uitnodigingslink voor een bestaand account. |
 | `npm run db:push` | Past `prisma/schema.prisma` toe. Zie de waarschuwing hieronder. |
 | `npm run db:push:dry` | Toont de DDL zonder die uit te voeren. |
-| `npm run dev` | Start de app met webpack. |
+| `npm run capture-fixtures` | Vernieuwt de testinvoer in `tests/fixtures/`. |
+
+### Tegen welke database draait dit?
+
+Standaard tegen **test**. Voeg `--env .env.lokaal-productie` toe voor productie:
+
+```bash
+npm run create-admin -- --env .env.lokaal-productie --email jij@bedrijf.nl --naam "Jouw Naam"
+```
+
+Elk script drukt vóór het iets doet af welk bestand het leest en tegen welke databasehost
+het gaat werken. Klopt dat niet met wat je verwacht, breek dan af.
+
+Let op: `DOTENV_CONFIG_PATH` werkt **niet** — die wordt door de geïnstalleerde
+dotenv-versie stilzwijgend genegeerd. Gebruik altijd `--env`.
+
+### Ergens ingesloten geraakt?
+
+Vergeten wachtwoord van de enige beheerder, of een nieuwe omgeving waar nog niemand binnen
+is? Er is geen zelfregistratie, dus dan kom je er via het beheerscherm niet meer in:
+
+```bash
+npm run invite -- --email jij@bedrijf.nl --url https://<url-van-die-omgeving>
+```
+
+De `--url` is nodig omdat `APP_URL` lokaal op `localhost:3000` staat; zonder die vlag krijg
+je een link die alleen op je eigen machine werkt.
 
 ## Hoe het werkt
 
@@ -121,10 +149,27 @@ hand aanpassen**.
 - **Prisma 6**, niet 7. Vastgezet omdat npm anders 7 installeert, wat breaking changes heeft.
 - **TypeScript 6**, niet 7. Next.js 16 weigert te bouwen met TypeScript 7.
 
+## Omgevingen
+
+Twee gescheiden Neon-databases en twee branches:
+
+| Branch | Vercel | Database | Floriday |
+|---|---|---|---|
+| `develop` | Preview | test (gevuld met staging-data) | staging |
+| `main` | Production | productie (leeg) | productie — nog aan te vragen |
+
+De volledige inrichting, inclusief welke omgevingsvariabele waar hoort en welk
+`.env`-bestand waarvoor dient, staat in `docs/omgevingen.md`.
+
 ## Verder lezen
 
-- `docs/vragen-voor-rfh.md` — openstaande vragen aan Royal FloraHolland, onderbouwd met data
-- `docs/inventarisatie.md` — hoe de koppeling met Floriday tot stand kwam
-- `docs/voortgang.md` — wat er gebouwd is en wat er onderweg misging
-- `docs/superpowers/specs/` — het ontwerp
-- `docs/superpowers/plans/` — het implementatieplan
+| Document | Waarover |
+|---|---|
+| `docs/wat-er-gebouwd-is.md` | **Begin hier** — de complete inventaris |
+| `docs/omgevingen.md` | Databases, branches, Vercel, configuratiebestanden |
+| `docs/vragen-voor-rfh.md` | Openstaande vragen aan Royal FloraHolland, met data onderbouwd |
+| `docs/inventarisatie.md` | Hoe de koppeling met Floriday tot stand kwam |
+| `docs/voortgang.md` | Wat er is gebouwd en wat er onderweg misging |
+| `docs/concept-mail-arjan.md` | Conceptmail, wacht op twee gegevens |
+| `docs/superpowers/specs/` | De twee ontwerpen |
+| `docs/superpowers/plans/` | De drie implementatieplannen |
