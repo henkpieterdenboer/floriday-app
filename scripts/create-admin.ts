@@ -1,10 +1,15 @@
 /**
- * Maakt de eerste beheerder aan. Zonder dit is er niemand die gebruikers kan uitnodigen,
- * en omdat er geen zelfregistratie is, kom je er anders nooit in.
+ * Maakt een beheerder aan. Zonder dit is er niemand die gebruikers kan uitnodigen, en
+ * omdat er geen zelfregistratie is, kom je er anders nooit in.
  *
- * Gebruik: npm run create-admin -- --email jij@bedrijf.nl --naam "Jouw Naam"
+ * Gebruik:
+ *   npm run create-admin -- --email jij@bedrijf.nl --naam "Jouw Naam"
+ *   npm run create-admin -- --env .env.production --email ... --naam "..."
+ *
+ * Zonder --env gaat dit naar de testdatabase. De doeldatabase wordt afgedrukt voordat er
+ * iets wordt aangemaakt.
  */
-import "dotenv/config";
+import "@/lib/load-env";
 import { prisma } from "@/lib/db";
 import { createUser, findUserByEmail } from "@/features/auth/users";
 import { createInvitation } from "@/features/auth/invitations";
@@ -23,11 +28,12 @@ async function main(): Promise<void> {
 
   if (!email || !name) {
     console.error('Gebruik: npm run create-admin -- --email jij@bedrijf.nl --naam "Jouw Naam"');
+    console.error("Voeg --env .env.production toe om een andere omgeving te kiezen.");
     process.exit(1);
   }
 
   if (await findUserByEmail(email)) {
-    console.error(`Er bestaat al een account voor ${email}.`);
+    console.error(`Er bestaat al een account voor ${email} in deze database.`);
     process.exit(1);
   }
 

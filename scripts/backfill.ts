@@ -8,8 +8,17 @@
  *   npm run backfill -- --pages 5    stop after five pages, for a first try
  *   npm run backfill -- --reset      start over from sequence zero
  *   npm run backfill -- --items-only only close gaps in the trade item lookup
+ *   npm run backfill -- --env .env.production   run against another environment
+ *
+ * Without --env this writes to the test database. The target is printed before anything
+ * happens, because this is the script where the wrong database does the most damage:
+ * pointing staging credentials at the production database would fill the production
+ * archive with test data, and the two cannot be separated again afterwards.
+ *
+ * The load-env import must stay first: imports run in declaration order, and both the
+ * Prisma client and getEnv() read their configuration at module load.
  */
-import "dotenv/config";
+import "@/lib/load-env";
 import { prisma } from "@/lib/db";
 import { createCustomersClient } from "@/features/floriday/client";
 import { runSupplySync } from "@/features/floriday/sync/run-supply-sync";
