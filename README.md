@@ -166,6 +166,7 @@ De volledige inrichting, inclusief welke omgevingsvariabele waar hoort en welk
 | Document | Waarover |
 |---|---|
 | `docs/wat-er-gebouwd-is.md` | **Begin hier** — de complete inventaris |
+| `docs/openstaand.md` | Wat er nog te doen is, op volgorde van urgentie |
 | `docs/omgevingen.md` | Databases, branches, Vercel, configuratiebestanden |
 | `docs/vragen-voor-rfh.md` | Openstaande vragen aan Royal FloraHolland, met data onderbouwd |
 | `docs/inventarisatie.md` | Hoe de koppeling met Floriday tot stand kwam |
