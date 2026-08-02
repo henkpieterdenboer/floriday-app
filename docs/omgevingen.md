@@ -46,6 +46,33 @@ verkeerde waarde wijzen uitnodigingsmails naar de andere omgeving.
 **De eerste beheerder bestaat alleen op test.** Productie is leeg, dus daar moet
 `npm run create-admin` opnieuw draaien zodra de omgeving staat.
 
+## Welk configuratiebestand is welk
+
+Vier bestanden met een `.env`-naam, en ze doen verschillende dingen. Alleen `.env.example`
+staat in git; de rest bevat geheimen en blijft lokaal.
+
+| Bestand | Waarvoor | Waar gebruikt |
+|---|---|---|
+| `.env` | Lokaal werken tegen de **test**database | jouw machine, standaard |
+| `.env.lokaal-productie` | Lokaal scripts draaien tegen **productie** | jouw machine, met `--env` |
+| `.env.vercel-preview` | **Importeren** in Vercel bij Preview | Vercel |
+| `.env.vercel-production` | **Importeren** in Vercel bij Production | Vercel |
+| `.env.example` | Sjabloon zonder waarden | staat in git |
+
+De twee `vercel-`bestanden gaan één keer naar Vercel en worden daarna niet meer gelezen —
+de applicatie draait op wat er in Vercel staat, niet op wat hier op schijf ligt.
+
+`.env.lokaal-productie` blijft wél nodig, voor de dingen die je met de hand tegen productie
+doet: de beheerder aanmaken, het schema bijwerken, de eerste backfill.
+
+```bash
+npm run create-admin -- --env .env.lokaal-productie --email jij@bedrijf.nl --naam "Jouw Naam"
+npm run backfill -- --env .env.lokaal-productie
+```
+
+Elk script drukt vóór het iets doet af welk bestand het gebruikt en tegen welke
+databasehost het gaat werken. Klopt dat niet met wat je verwacht, breek dan af.
+
 ## Omgevingsvariabelen in Vercel
 
 Zet deze per omgeving (Production en Preview apart):
@@ -75,7 +102,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 1. Floriday-productiecredentials en API-key aanvragen. **De key wordt maar één keer
    getoond** — meteen vastleggen.
-2. Die in `.env.production` zetten en in Vercel bij Production.
+2. Die in `.env.lokaal-productie` zetten en in Vercel bij Production.
 3. `npm run create-admin` draaien tegen productie, zodat er een beheerder is.
 4. Pas dán de backfill draaien tegen productie. Eerder zou staging-data in de
    productiedatabase belanden.

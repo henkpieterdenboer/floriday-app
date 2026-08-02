@@ -8,7 +8,7 @@
  *   npm run backfill -- --pages 5    stop after five pages, for a first try
  *   npm run backfill -- --reset      start over from sequence zero
  *   npm run backfill -- --items-only only close gaps in the trade item lookup
- *   npm run backfill -- --env .env.production   run against another environment
+ *   npm run backfill -- --env .env.lokaal-productie   run against another environment
  *
  * Without --env this writes to the test database. The target is printed before anything
  * happens, because this is the script where the wrong database does the most damage:

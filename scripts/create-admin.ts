@@ -4,7 +4,7 @@
  *
  * Gebruik:
  *   npm run create-admin -- --email jij@bedrijf.nl --naam "Jouw Naam"
- *   npm run create-admin -- --env .env.production --email ... --naam "..."
+ *   npm run create-admin -- --env .env.lokaal-productie --email ... --naam "..."
  *
  * Zonder --env gaat dit naar de testdatabase. De doeldatabase wordt afgedrukt voordat er
  * iets wordt aangemaakt.
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
 
   if (!email || !name) {
     console.error('Gebruik: npm run create-admin -- --email jij@bedrijf.nl --naam "Jouw Naam"');
-    console.error("Voeg --env .env.production toe om een andere omgeving te kiezen.");
+    console.error("Voeg --env .env.lokaal-productie toe om een andere omgeving te kiezen.");
     process.exit(1);
   }
 

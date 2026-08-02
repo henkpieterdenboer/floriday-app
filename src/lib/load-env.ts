@@ -24,7 +24,7 @@ const index = process.argv.indexOf("--env");
 const path = index === -1 ? ".env" : process.argv[index + 1];
 
 if (index !== -1 && !path) {
-  throw new Error("--env verwacht een bestandsnaam, bijvoorbeeld: --env .env.production");
+  throw new Error("--env verwacht een bestandsnaam, bijvoorbeeld: --env .env.lokaal-productie");
 }
 
 const result = config({ path, override: true, quiet: true });
