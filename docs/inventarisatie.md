@@ -29,12 +29,18 @@ Arjan Duijkers — Integration Consultant, Royal FloraHolland
 - Organisatie in Floriday: Coloriginz, GLN `8714231192756`
 
 ### Credentials (staging)
-Staan nu nog in de `.eml`-bestanden. Horen in een `.env` die niet in git komt.
+
+Staan in `.env`, dat buiten git valt. De oorspronkelijke mails staan in `input/`, dat
+eveneens buiten git valt.
 
 | Omgeving | Client ID | Client Secret |
 |---|---|---|
-| Staging **customers** | `pmE98nBtRJ5rWqgM61Yb` | `FLORIDAY_CUSTOMERS_CLIENT_SECRET` |
-| Staging **suppliers** | `wqJo3SYM1zEZ0VXLjyKg` | `FLORIDAY_SUPPLIERS_CLIENT_SECRET` |
+| Staging **customers** | `FLORIDAY_CUSTOMERS_CLIENT_ID` | `FLORIDAY_CUSTOMERS_CLIENT_SECRET` |
+| Staging **suppliers** | `FLORIDAY_SUPPLIERS_CLIENT_ID` | `FLORIDAY_SUPPLIERS_CLIENT_SECRET` |
+
+Deze waarden hebben eerder wél letterlijk in dit document gestaan. Ze zijn uit de volledige
+git-historie verwijderd voordat de repository voor het eerst gepusht werd. Zet ze hier niet
+terug — een document dat in git staat is geen bewaarplaats voor geheimen.
 
 ### Overige afspraken uit de mail
 - Twee API-releases per jaar (winter- en zomerrelease).
