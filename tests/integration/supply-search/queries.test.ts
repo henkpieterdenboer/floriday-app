@@ -74,26 +74,42 @@ describe("fetchSupplyLines", () => {
     }
   }, 20_000);
 
-  it("zoeken op een deel van een artikelnaam levert alleen regels waarvan de artikelnaam dat bevat", async () => {
+  it("zoeken levert alleen regels waarin de term in een van de doorzochte velden staat", async () => {
     // Rechtstreeks uit een echte combinatie gehaald in plaats van los een artikel te
     // pakken: niet elk artikel heeft ook echt een aanbodregel binnen het gekozen bereik.
+    //
+    // ORDER BY erbij omdat een LIMIT zonder ordening geen vaste rij oplevert. Deze test
+    // koos daardoor elke run een andere zoekterm en viel pas om zodra hij toevallig een
+    // term trok die ook in een kwekersnaam bleek voor te komen.
     const [candidate] = await prisma.$queryRaw<{ name: string }[]>`
       SELECT ti.name
       FROM "SupplyLine" sl
       JOIN "TradeItem" ti ON ti."tradeItemId" = sl."tradeItemId"
       WHERE length(ti.name) >= 8
+      ORDER BY ti.name
       LIMIT 1
     `;
     expect(candidate).toBeDefined();
-    const term = candidate.name.slice(0, 8);
+    const term = candidate.name.slice(0, 8).toLowerCase();
 
     const page = await fetchSupplyLines(
       baseFilters({ search: term, sort: { column: "articleName", direction: "asc" } }),
     );
 
+    // De zoekfunctie kijkt bewust in drie velden: artikelnaam, kwekersnaam en
+    // afleverbonreferentie. Een regel mag dus op elk daarvan matchen; eisen dat juist de
+    // artikelnaam de term bevat beschrijft het contract te smal en maakt van elke kweker
+    // wiens naam op een artikelnaam lijkt een testfout.
     expect(page.total).toBeGreaterThan(0);
     for (const row of page.rows) {
-      expect(row.articleName?.toLowerCase()).toContain(term.toLowerCase());
+      const doorzocht = [row.articleName, row.growerName, row.deliveryNoteReference]
+        .filter((veld): veld is string => veld !== null)
+        .map((veld) => veld.toLowerCase());
+
+      expect(
+        doorzocht.some((veld) => veld.includes(term)),
+        `geen van ${JSON.stringify(doorzocht)} bevat "${term}"`,
+      ).toBe(true);
     }
   });
 
