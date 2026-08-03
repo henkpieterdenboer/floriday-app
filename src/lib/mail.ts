@@ -66,7 +66,7 @@ export async function sendMail(mail: Mail): Promise<string | null> {
   // ook niet als er per ongeluk nog een demo-cookie in de browser van een beheerder staat.
   let providerCookie: string | undefined;
   let recipientCookie: string | undefined;
-  if (isDemoModeAllowed(process.env.VERCEL_ENV)) {
+  if (isDemoModeAllowed(process.env.VERCEL_ENV, process.env.VERCEL)) {
     try {
       const store = await cookies();
       providerCookie = store.get(EMAIL_PROVIDER_COOKIE)?.value;
@@ -81,6 +81,7 @@ export async function sendMail(mail: Mail): Promise<string | null> {
 
   const routing = resolveMailRouting({
     vercelEnv: process.env.VERCEL_ENV,
+    onVercel: process.env.VERCEL,
     smtpConfigured,
     providerCookie,
     recipientCookie,

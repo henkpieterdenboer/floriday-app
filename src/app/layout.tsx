@@ -23,7 +23,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // zodat demo-controls.tsx en de twee API-routes onder /api/auth/switch-role en
   // /api/email-provider precies dezelfde beslissing gebruiken. `session` wordt alleen
   // opgehaald wanneer die besturing sowieso al mag draaien.
-  const demoModeAllowed = isDemoModeAllowed(process.env.VERCEL_ENV);
+  const demoModeAllowed = isDemoModeAllowed(process.env.VERCEL_ENV, process.env.VERCEL);
   const session = demoModeAllowed ? await auth() : null;
 
   return (

@@ -89,10 +89,30 @@ van de huidige rol.
 anders doet next-auth een GET die de `jwt`-callback niet met `trigger: "update"` aanroept).
 Zie het commentaar bij de `jwt`-callback in `src/features/auth/auth-config.ts`.
 
-Beide routes - en de balk zelf - draaien alleen wanneer `isDemoModeAllowed` (in
-`environment-banner.ts`) dat toestaat: dezelfde `VERCEL_ENV !== "production"`-regel als de
-balk, bewust geen `NEXT_PUBLIC_DEMO_MODE` (die reist mee naar de browser en zou een viewer
-zichzelf tot beheerder kunnen laten maken). Uitgeschakeld geven beide routes 404, niet 403.
+### Twee regels die tegengesteld terugvallen
+
+De balk en de demo-besturing gebruiken **verschillende** functies, en dat is opzet.
+
+| | Bij twijfel | Waarom |
+|---|---|---|
+| `resolveBanner` | tonen | Een ontbrekende balk laat je denken dat je naar echte cijfers kijkt |
+| `isDemoModeAllowed` | weigeren | De rolwisselaar schrijft naar `User.role`; aan op productie betekent dat elke viewer zichzelf beheerder maakt |
+
+Het concrete geval waarvoor dit uit elkaar moest: Vercel kent een instelling
+**"Automatically expose System Environment Variables"**. Staat die uit, dan is `VERCEL_ENV`
+leeg — ook op productie. Een enkele regel `vercelEnv !== "production"` zou de rolwisselaar
+dan juist op productie tonen.
+
+`isDemoModeAllowed` kijkt daarom ook naar `VERCEL`: buiten Vercel (lokaal) altijd toestaan,
+op Vercel alleen bij een expliciete `preview` of `development`.
+
+Het ziet eruit als een inconsistentie en wordt bij een opruimactie makkelijk
+"rechtgetrokken". Er staat een test omheen die vastlegt dat de twee bij hetzelfde geval
+verschillend beslissen.
+
+Bewust geen `NEXT_PUBLIC_DEMO_MODE`: die reist mee naar de browser en moet met de hand goed
+gezet worden. Vergeten op preview is hinderlijk, per ongeluk aan op productie is een gat.
+Uitgeschakeld geven beide routes 404, niet 403.
 
 ## Wat het meebracht
 

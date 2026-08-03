@@ -20,6 +20,7 @@ describe("currentEmailProvider", () => {
 describe("resolveMailRouting", () => {
   const base = {
     vercelEnv: "preview",
+    onVercel: "1",
     smtpConfigured: true,
     providerCookie: undefined,
     recipientCookie: undefined,
@@ -69,5 +70,41 @@ describe("resolveMailRouting", () => {
       recipientCookie: "test@example.com",
     });
     expect(result).toEqual({ useResend: true, to: "klant@example.com", subject: "Uitnodiging" });
+  });
+});
+
+describe("resolveMailRouting op een Vercel-omgeving zonder VERCEL_ENV", () => {
+  // Vercel kan de systeemvariabelen verbergen. Dan is VERCEL_ENV leeg, ook op productie.
+  // De cookie mag dan niets meer overrulen - anders zou iemand met een oude cookie zijn
+  // productiemail naar een testadres kunnen sturen.
+  it("negeert de cookies volledig", () => {
+    const routing = resolveMailRouting({
+      vercelEnv: undefined,
+      onVercel: "1",
+      smtpConfigured: true,
+      providerCookie: "test",
+      recipientCookie: "afvanger@example.com",
+      to: "klant@example.com",
+      subject: "Uitnodiging",
+    });
+
+    expect(routing.useResend).toBe(true);
+    expect(routing.to).toBe("klant@example.com");
+    expect(routing.subject).toBe("Uitnodiging");
+  });
+
+  it("laat de cookies wel gelden bij lokaal draaien buiten Vercel", () => {
+    const routing = resolveMailRouting({
+      vercelEnv: undefined,
+      onVercel: undefined,
+      smtpConfigured: true,
+      providerCookie: "test",
+      recipientCookie: "afvanger@example.com",
+      to: "klant@example.com",
+      subject: "Uitnodiging",
+    });
+
+    expect(routing.useResend).toBe(false);
+    expect(routing.to).toBe("afvanger@example.com");
   });
 });

@@ -37,7 +37,7 @@ const cookieOptions = {
  * die functie voor waarom.
  */
 async function guard(): Promise<NextResponse | null> {
-  if (!isDemoModeAllowed(process.env.VERCEL_ENV)) {
+  if (!isDemoModeAllowed(process.env.VERCEL_ENV, process.env.VERCEL)) {
     return new NextResponse(null, { status: 404 });
   }
   const session = await auth();

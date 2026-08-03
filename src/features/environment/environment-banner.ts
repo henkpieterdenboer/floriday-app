@@ -25,7 +25,9 @@ export interface BannerState {
 export function resolveBanner(input: EnvironmentInput): BannerState {
   const { vercelEnv, floridayBaseUrl } = input;
 
-  if (!isDemoModeAllowed(vercelEnv)) {
+  // Bewust NIET isDemoModeAllowed: die twee vallen naar tegengestelde kanten terug bij
+  // twijfel, en dat is geen slordigheid maar het hele punt. Zie de toelichting daar.
+  if (vercelEnv === "production") {
     return { show: false, message: "" };
   }
 
@@ -41,18 +43,34 @@ export function resolveBanner(input: EnvironmentInput): BannerState {
 }
 
 /**
- * De ene plek die bepaalt of demo-besturing (rolwisselaar, e-mailschakelaar) mag draaien:
- * dezelfde regel als de balk zelf, tonen tenzij aantoonbaar productie. Gebruikt door de
- * balk, `/api/auth/switch-role`, `/api/email-provider`, `demo-controls.tsx` en `mail.ts` -
- * één implementatie, zodat een wijziging hier overal doorwerkt in plaats van dat iemand een
- * van de plekken vergeet bij te werken.
+ * Of demo-besturing (rolwisselaar, e-mailschakelaar) mag draaien. Gebruikt door
+ * `/api/auth/switch-role`, `/api/email-provider`, `demo-controls.tsx` en `mail.ts` - één
+ * implementatie, zodat niemand een van die plekken vergeet.
  *
- * Bewust NIET `NEXT_PUBLIC_DEMO_MODE`: die variabele reist mee naar de browser. Voor een
- * balk is dat onschuldig, maar een rolwisselaar erachter zou een viewer zichzelf tot
- * beheerder laten maken zodra die vlag ooit naar productie lekt (eerder gebeurd via een CLI
- * upload). `VERCEL_ENV` zet Vercel zelf, is uitsluitend server-side leesbaar en kan dus niet
- * op die manier meelekken.
+ * **Deze valt naar de andere kant terug dan de balk, en dat is opzet.** De balk verschijnt
+ * bij twijfel, want een ontbrekende balk laat je denken dat je naar echte cijfers kijkt.
+ * Demo-besturing verdwijnt bij twijfel, want de rolwisselaar schrijft naar `User.role`: als
+ * die ooit op productie aanstaat, kan elke viewer zichzelf beheerder maken. Allebei "de
+ * veilige kant", maar tegengesteld — vandaar twee functies in plaats van één.
+ *
+ * De regel: toestaan zolang we buiten Vercel draaien (lokale ontwikkeling), en op Vercel
+ * alleen bij een expliciete `preview` of `development`.
+ *
+ * Waarom niet simpelweg `vercelEnv !== "production"`: Vercel kent een instelling
+ * "Automatically expose System Environment Variables". Staat die uit, dan is `VERCEL_ENV`
+ * leeg — ook op productie. Met die kortere regel zou de rolwisselaar dan juist op productie
+ * verschijnen, precies het geval dat hij moet voorkomen.
+ *
+ * Bewust ook geen `NEXT_PUBLIC_DEMO_MODE`: die reist mee naar de browser en moet met de
+ * hand goed gezet worden. Vergeten op preview is hinderlijk; per ongeluk aan op productie is
+ * een gat. `VERCEL_ENV` en `VERCEL` zet Vercel zelf.
  */
-export function isDemoModeAllowed(vercelEnv: string | undefined): boolean {
-  return vercelEnv !== "production";
+export function isDemoModeAllowed(
+  vercelEnv: string | undefined,
+  onVercel: string | undefined,
+): boolean {
+  // Buiten Vercel (lokaal draaien) is er geen productie om te beschermen.
+  if (!onVercel) return true;
+
+  return vercelEnv === "preview" || vercelEnv === "development";
 }

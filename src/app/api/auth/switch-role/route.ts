@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   // want die variabele reist mee naar de browser en zou van deze rolwisselaar een manier
   // maken waarop elke bezoeker zichzelf tot beheerder kan maken zodra de vlag ooit naar
   // productie lekt.
-  if (!isDemoModeAllowed(process.env.VERCEL_ENV)) {
+  if (!isDemoModeAllowed(process.env.VERCEL_ENV, process.env.VERCEL)) {
     return new NextResponse(null, { status: 404 });
   }
 

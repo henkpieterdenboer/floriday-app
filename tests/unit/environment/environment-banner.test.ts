@@ -53,21 +53,42 @@ describe("resolveBanner", () => {
 });
 
 describe("isDemoModeAllowed", () => {
+  const OP_VERCEL = "1";
+
   // Dit is de regel waar de rolwisselaar op vertrouwt: fout om zou betekenen dat een
   // viewer zichzelf tot beheerder kan maken op productie.
   it("staat demo-besturing niet toe op productie", () => {
-    expect(isDemoModeAllowed("production")).toBe(false);
+    expect(isDemoModeAllowed("production", OP_VERCEL)).toBe(false);
   });
 
   it("staat demo-besturing toe op preview", () => {
-    expect(isDemoModeAllowed("preview")).toBe(true);
+    expect(isDemoModeAllowed("preview", OP_VERCEL)).toBe(true);
   });
 
-  it("staat demo-besturing toe wanneer VERCEL_ENV helemaal niet gezet is", () => {
-    expect(isDemoModeAllowed(undefined)).toBe(true);
+  it("staat demo-besturing toe bij lokaal draaien, buiten Vercel", () => {
+    expect(isDemoModeAllowed(undefined, undefined)).toBe(true);
   });
 
-  it("staat demo-besturing toe bij een onbekende waarde - dezelfde veilige kant als de balk", () => {
-    expect(isDemoModeAllowed("iets-nieuws")).toBe(true);
+  // Dit is het geval waarvoor deze functie los staat van resolveBanner. Vercel kent een
+  // instelling die de systeemvariabelen niet blootstelt; dan is VERCEL_ENV leeg, ook op
+  // productie. De balk mag dan verschijnen (bij twijfel tonen), maar de rolwisselaar
+  // absoluut niet.
+  it("weigert demo-besturing op Vercel wanneer VERCEL_ENV ontbreekt", () => {
+    expect(isDemoModeAllowed(undefined, OP_VERCEL)).toBe(false);
+  });
+
+  it("weigert demo-besturing bij een onbekende waarde op Vercel", () => {
+    expect(isDemoModeAllowed("iets-nieuws", OP_VERCEL)).toBe(false);
+  });
+
+  // De twee functies vallen bij twijfel naar tegengestelde kanten. Vastgelegd omdat het
+  // eruitziet als een inconsistentie en het bij een opruimactie makkelijk "rechtgetrokken"
+  // wordt - waarmee precies het gat terugkomt.
+  it("laat de balk wel zien waar demo-besturing geweigerd wordt", () => {
+    const vercelEnv = undefined;
+    const onVercel = OP_VERCEL;
+
+    expect(isDemoModeAllowed(vercelEnv, onVercel)).toBe(false);
+    expect(resolveBanner({ vercelEnv, floridayBaseUrl: staging }).show).toBe(true);
   });
 });

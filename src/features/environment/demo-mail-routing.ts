@@ -25,6 +25,9 @@ export function currentEmailProvider(
 
 export interface ResolveMailRoutingInput {
   vercelEnv: string | undefined;
+  /** Of we op Vercel draaien. Zonder dit kan een lege VERCEL_ENV op productie niet van
+   * lokaal draaien onderscheiden worden - zie isDemoModeAllowed. */
+  onVercel: string | undefined;
   smtpConfigured: boolean;
   providerCookie: string | undefined;
   recipientCookie: string | undefined;
@@ -54,7 +57,7 @@ export interface MailRouting {
  *   was.
  */
 export function resolveMailRouting(input: ResolveMailRoutingInput): MailRouting {
-  const demoAllowed = isDemoModeAllowed(input.vercelEnv);
+  const demoAllowed = isDemoModeAllowed(input.vercelEnv, input.onVercel);
   const providerCookie = demoAllowed ? input.providerCookie : undefined;
   const recipientCookie = demoAllowed ? input.recipientCookie : undefined;
 
