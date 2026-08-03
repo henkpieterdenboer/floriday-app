@@ -1,10 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, type RefObject } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import { SsoButton } from "@/components/auth/sso-button";
 import { entraSignInAction, loginAction, type LoginState } from "@/features/auth/actions";
 
 const initialState: LoginState = {};
@@ -15,8 +18,31 @@ export interface LoginFormProps {
   entraError: string | null;
 }
 
+/**
+ * Verbindt de knop uit @col/sso-button met onze server action.
+ *
+ * Die knop is een `type="button"` met een `onClick`; wij melden aan via een
+ * `<form action={...}>`. Deze wrapper dient dat formulier in bij een klik en
+ * leest de bezig-stand uit useFormStatus - dat laatste werkt alleen voor een
+ * component dat binnen het formulier zelf staat, vandaar dat dit een apart
+ * component is en geen stukje van LoginForm.
+ */
+function EntraSubmit({ formRef }: { formRef: RefObject<HTMLFormElement | null> }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <SsoButton
+      label="Aanmelden met Microsoft"
+      busyLabel="Bezig met aanmelden..."
+      busy={pending}
+      onClick={() => formRef.current?.requestSubmit()}
+    />
+  );
+}
+
 export function LoginForm({ verder, entraEnabled, entraError }: LoginFormProps) {
   const [state, formAction, pending] = useActionState(loginAction, initialState);
+  const entraFormRef = useRef<HTMLFormElement>(null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -30,6 +56,24 @@ export function LoginForm({ verder, entraEnabled, entraError }: LoginFormProps) 
         <Alert variant="destructive">
           <AlertDescription>{state.error}</AlertDescription>
         </Alert>
+      ) : null}
+
+      {entraEnabled ? (
+        <>
+          <form action={entraSignInAction} ref={entraFormRef}>
+            <input type="hidden" name="verder" value={verder} />
+            <EntraSubmit formRef={entraFormRef} />
+          </form>
+
+          <div className="relative">
+            <Separator />
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="bg-card px-2 text-xs text-muted-foreground">
+                of met een wachtwoord
+              </span>
+            </span>
+          </div>
+        </>
       ) : null}
 
       <form action={formAction} className="flex flex-col gap-4">
@@ -55,15 +99,6 @@ export function LoginForm({ verder, entraEnabled, entraError }: LoginFormProps) 
           {pending ? "Bezig met aanmelden..." : "Aanmelden"}
         </Button>
       </form>
-
-      {entraEnabled ? (
-        <form action={entraSignInAction}>
-          <input type="hidden" name="verder" value={verder} />
-          <Button type="submit" variant="outline" className="w-full">
-            Aanmelden met Microsoft
-          </Button>
-        </form>
-      ) : null}
     </div>
   );
 }

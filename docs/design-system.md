@@ -14,6 +14,10 @@ Registry: `https://design-system.apps.coloriginz.com/r/{name}.json`, gekoppeld i
 | Item | Versie | Waarvoor |
 |---|---|---|
 | `@col/demo-mode` | 1.0.1 | De testbalk boven aan elke pagina |
+| `@col/auth-shell` | 1.0.0 | Achtergrondfoto + kaart op login en uitnodiging |
+| `@col/brand-logo` | 1.1.0 | Het Coloriginz-logo in de kaartheader |
+| `@col/sso-button` | 1.0.0 | De Microsoft-knop op de inlogpagina |
+| `@col/brand-assets` | 1.0.0 | Script dat de foto's en logo's naar `public/brand/` haalt |
 
 Installeren of bijwerken:
 
@@ -22,14 +26,29 @@ npx shadcn add @col/demo-mode --overwrite
 git diff
 ```
 
-Dat raakt alleen de beheerde bestanden in `src/components/demo/`. Onze eigen code blijft
-ongemoeid — daarom staat die ook niet in die map.
+Dat raakt alleen de beheerde bestanden in `src/components/demo/`, `src/components/auth/` en
+`src/components/brand/`. Onze eigen code blijft ongemoeid — daarom staat die ook niet in die
+mappen.
 
-Welke versie hier draait:
+Welke versies hier draaien:
 
 ```bash
-grep -rn DEMO_MODE_VERSION src/
+grep -rn "_VERSION = " src/components/
 ```
+
+De merkassets zitten niet in de registry maar achter een manifest, en worden apart
+opgehaald:
+
+```bash
+node scripts/pull-brand-assets.mjs
+git diff public/brand/
+```
+
+Bewust geen build-stap: zo zie je in de diff wanneer een logo verandert, en werkt de app
+door als het design system onbereikbaar is. Let op dat `npx shadcn add @col/brand-assets`
+het script in `src/scripts/` neerzet (het volgt de `lib`-alias); wij hebben het naar
+`scripts/` verplaatst omdat al onze scripts daar staan. Na een `--overwrite` staat het er
+weer dubbel — verplaats het dan opnieuw.
 
 ## Hoe de balk is ingebouwd
 
@@ -114,11 +133,58 @@ Bewust geen `NEXT_PUBLIC_DEMO_MODE`: die reist mee naar de browser en moet met d
 gezet worden. Vergeten op preview is hinderlijk, per ongeluk aan op productie is een gat.
 Uitgeschakeld geven beide routes 404, niet 403.
 
+## De auth-pagina's
+
+`/login` en `/uitnodiging/[token]` staan sinds 3 augustus 2026 in een `AuthShell`: de foto
+`public/brand/backgrounds/default.jpg` met `overlay="light"`, en daarop een kaart met het
+logo (`variant="plain"`, want een zwart woordmerk op een witte kaart) boven de titel.
+
+De overlay van `AuthShell` is `absolute` binnen de shell en niet `fixed`. Daardoor blijft de
+testbalk erboven leesbaar in plaats van mee te verduisteren. Dat is een keuze van het item,
+niet iets wat wij hier hebben rechtgezet — hij staat er om deze reden.
+
+### Waarom niet `@col/auth-pages-starter`
+
+Dat item levert vier complete pagina's en drie API-routes, en zou op het eerste gezicht
+precies zijn wat we nodig hadden. We hebben het bewust niet genomen:
+
+- Het draagt het auth-model van de onboarding-portal mee: `activationToken` en
+  `activationExpiresAt` **op de User**, bcryptjs, een eigen wachtwoord-vergeten-flow. Wij
+  hebben een aparte `Invitation`-tabel die alleen de hash bewaart, argon2id, en geen
+  wachtwoord-vergeten (een beheerder stuurt een nieuwe uitnodiging).
+- Het verwacht zes modules die wij nergens anders voor gebruiken: `i18n-context`,
+  `LanguageSelector`, `label-config`, `logo-base64`, `rate-limit`, `validations`. Zonder die
+  bouwt de app niet.
+- Zijn `registryDependencies` bevatten `alert, button, card, input, label, separator`. Die
+  worden in hun upstream-versie opgehaald en overschrijven onze kopieën — en die zitten in
+  het inlogscherm, het beheerscherm én het aanbodscherm.
+
+De drie componenten eronder zijn wel overgenomen. Samen geven ze hetzelfde beeld, op onze
+eigen authenticatie, waar de tests al omheen staan.
+
+### De Microsoft-knop en onze server action
+
+`SsoButton` is een `type="button"` met een `onClick`; wij melden aan via
+`<form action={entraSignInAction}>`. `EntraSubmit` in `login-form.tsx` verbindt die twee: hij
+dient het formulier in met `requestSubmit()` en leest de bezig-stand uit `useFormStatus`.
+Dat laatste werkt alleen voor een component *binnen* het formulier, vandaar dat het een
+apart component is en geen stukje van `LoginForm`.
+
+Dit kost wel wat: de knop werkte eerder ook zonder JavaScript, want hij was een gewone
+submit-knop. Nu niet meer. Voor een interne app met een aanmeldscherm dat toch al op React
+draait weegt dat niet op tegen een eigen namaakknop naast de beheerde versie.
+
 ## Wat het meebracht
 
 De installatie voegde twee shadcn-primitives toe die we nog niet hadden: `badge` en
 `dropdown-menu`. Die waren aanvankelijk alleen nodig voor de rol- en e-mailschakelaar, maar
 worden nu ook echt gebruikt (zie hierboven).
+
+De auth-componenten voegden `separator` toe, voor het streepje tussen de Microsoft-knop en
+de wachtwoordvelden. `sso-button` hangt aan `button`, maar die had de shadcn CLI al als
+identiek herkend en overgeslagen; `git diff src/components/ui/` was leeg na installatie.
+Controleer dat na elke `add` opnieuw — het is de enige manier om te merken dat een beheerd
+onderdeel je primitives heeft vervangen.
 
 Zeven CSS-tokens (`--demo-*`) zijn in `src/app/globals.css` gezet, met een variant voor
 licht en donker.

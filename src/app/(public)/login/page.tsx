@@ -1,4 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { BrandLogo } from "@/components/brand/brand-logo";
 import { entraEnabled } from "@/features/auth/auth-config";
 import { entraErrorMessage } from "@/features/auth/entra-error-messages";
 import { isSafeRedirectPath } from "@/features/auth/safe-redirect";
@@ -16,9 +18,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const entraError = entraErrorMessage(params.fout);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
+    <AuthShell backgroundImage="/brand/backgrounds/default.jpg" overlay="light">
+      <Card>
+        <CardHeader className="justify-items-center gap-3 text-center">
+          <BrandLogo
+            src="/brand/logos/coloriginz.png"
+            alt="Coloriginz"
+            variant="plain"
+            size="h-9"
+          />
           <CardTitle>Aanmelden</CardTitle>
           <CardDescription>Toegang tot het aanbodoverzicht van Coloriginz.</CardDescription>
         </CardHeader>
@@ -26,6 +34,6 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <LoginForm verder={verder} entraEnabled={entraEnabled} entraError={entraError} />
         </CardContent>
       </Card>
-    </main>
+    </AuthShell>
   );
 }
