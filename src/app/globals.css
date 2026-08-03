@@ -45,6 +45,13 @@
     --radius-2xl: calc(var(--radius) * 1.8);
     --radius-3xl: calc(var(--radius) * 2.2);
     --radius-4xl: calc(var(--radius) * 2.6);
+    --color-demo-bg: var(--demo-bg);
+    --color-demo-border: var(--demo-border);
+    --color-demo-fg: var(--demo-fg);
+    --color-demo-control-bg: var(--demo-control-bg);
+    --color-demo-control-bg-hover: var(--demo-control-bg-hover);
+    --color-demo-control-border: var(--demo-control-border);
+    --color-demo-control-fg: var(--demo-control-fg);
 }
 
 :root {
@@ -80,6 +87,13 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+    --demo-bg: oklch(0.971 0.013 17.38);
+    --demo-border: oklch(0.885 0.062 18.334);
+    --demo-fg: oklch(0.505 0.213 27.518);
+    --demo-control-bg: oklch(0.987 0.026 102.212);
+    --demo-control-bg-hover: oklch(0.973 0.071 103.193);
+    --demo-control-border: oklch(0.905 0.182 98.111);
+    --demo-control-fg: oklch(0.554 0.135 66.442);
 }
 
 .dark {
@@ -114,6 +128,13 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --demo-bg: oklch(0.258 0.092 26.042);
+    --demo-border: oklch(0.396 0.141 25.723);
+    --demo-fg: oklch(0.885 0.062 18.334);
+    --demo-control-bg: oklch(0.286 0.066 53.813);
+    --demo-control-bg-hover: oklch(0.336 0.086 55.934);
+    --demo-control-border: oklch(0.476 0.114 61.907);
+    --demo-control-fg: oklch(0.905 0.182 98.111);
 }
 
 @layer base {
