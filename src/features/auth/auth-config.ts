@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { verifyPassword } from "@/features/auth/password";
 import { decideEntraSignIn } from "@/features/auth/entra-linking";
-import { findUserByEmail, recordLogin } from "@/features/auth/users";
+import { findUserByEmail, findUserById, recordLogin } from "@/features/auth/users";
 import { authConfig, entraEnabled } from "@/features/auth/auth.config";
 
 export { entraEnabled };
@@ -39,6 +39,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [credentialsProvider, ...authConfig.providers],
   callbacks: {
     ...authConfig.callbacks,
+
+    /**
+     * Overschrijft de edge-veilige `jwt`-callback uit `auth.config.ts` met een variant die
+     * ook de rol kan verversen zonder opnieuw in te loggen. Bewust hier en niet daar: dit
+     * vraagt een databasequery, en `auth.config.ts` wordt ook door de Edge-middleware
+     * geladen (zie het commentaar daar over `@node-rs/argon2`) - dus geen Prisma-aanroepen
+     * in dat bestand.
+     *
+     * De rol staat normaal alleen in de JWT sinds het inloggen (`if (user)` hieronder,
+     * identiek aan `auth.config.ts`). De demo-rolwisselaar in de testbalk werkt daarom
+     * niet door alleen `User.role` te updaten - de lopende sessie zou het nooit merken.
+     * `demo-controls.tsx` roept na die update `useSession().update({})` aan, wat next-auth
+     * een POST naar `/api/auth/session` laat doen; dat roept deze callback opnieuw aan met
+     * `trigger === "update"`, waarna hij de rol vers uit de database leest.
+     */
+    async jwt({ token, user, trigger }) {
+      if (user) {
+        token.userId = user.id;
+        token.role = user.role ?? "VIEWER";
+        return token;
+      }
+
+      if (trigger === "update" && typeof token.userId === "string") {
+        const dbUser = await findUserById(token.userId);
+        if (dbUser) token.role = dbUser.role;
+      }
+
+      return token;
+    },
 
     async signIn({ user, account, profile }) {
       if (account?.provider !== "microsoft-entra-id") return true;

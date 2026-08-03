@@ -25,7 +25,7 @@ export interface BannerState {
 export function resolveBanner(input: EnvironmentInput): BannerState {
   const { vercelEnv, floridayBaseUrl } = input;
 
-  if (vercelEnv === "production") {
+  if (!isDemoModeAllowed(vercelEnv)) {
     return { show: false, message: "" };
   }
 
@@ -38,4 +38,21 @@ export function resolveBanner(input: EnvironmentInput): BannerState {
       : "Floriday productie";
 
   return { show: true, message: `${omgeving} · ${floriday} · geen echte cijfers` };
+}
+
+/**
+ * De ene plek die bepaalt of demo-besturing (rolwisselaar, e-mailschakelaar) mag draaien:
+ * dezelfde regel als de balk zelf, tonen tenzij aantoonbaar productie. Gebruikt door de
+ * balk, `/api/auth/switch-role`, `/api/email-provider`, `demo-controls.tsx` en `mail.ts` -
+ * één implementatie, zodat een wijziging hier overal doorwerkt in plaats van dat iemand een
+ * van de plekken vergeet bij te werken.
+ *
+ * Bewust NIET `NEXT_PUBLIC_DEMO_MODE`: die variabele reist mee naar de browser. Voor een
+ * balk is dat onschuldig, maar een rolwisselaar erachter zou een viewer zichzelf tot
+ * beheerder laten maken zodra die vlag ooit naar productie lekt (eerder gebeurd via een CLI
+ * upload). `VERCEL_ENV` zet Vercel zelf, is uitsluitend server-side leesbaar en kan dus niet
+ * op die manier meelekken.
+ */
+export function isDemoModeAllowed(vercelEnv: string | undefined): boolean {
+  return vercelEnv !== "production";
 }

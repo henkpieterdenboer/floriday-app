@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveBanner } from "@/features/environment/environment-banner";
+import { isDemoModeAllowed, resolveBanner } from "@/features/environment/environment-banner";
 
 const staging = "https://api.staging.floriday.io/customers-api-2026v1";
 const productie = "https://api.floriday.io/customers-api-2026v1";
@@ -49,5 +49,25 @@ describe("resolveBanner", () => {
       expect(resolveBanner({ vercelEnv: env, floridayBaseUrl: staging }).message)
         .toContain("geen echte cijfers");
     }
+  });
+});
+
+describe("isDemoModeAllowed", () => {
+  // Dit is de regel waar de rolwisselaar op vertrouwt: fout om zou betekenen dat een
+  // viewer zichzelf tot beheerder kan maken op productie.
+  it("staat demo-besturing niet toe op productie", () => {
+    expect(isDemoModeAllowed("production")).toBe(false);
+  });
+
+  it("staat demo-besturing toe op preview", () => {
+    expect(isDemoModeAllowed("preview")).toBe(true);
+  });
+
+  it("staat demo-besturing toe wanneer VERCEL_ENV helemaal niet gezet is", () => {
+    expect(isDemoModeAllowed(undefined)).toBe(true);
+  });
+
+  it("staat demo-besturing toe bij een onbekende waarde - dezelfde veilige kant als de balk", () => {
+    expect(isDemoModeAllowed("iets-nieuws")).toBe(true);
   });
 });

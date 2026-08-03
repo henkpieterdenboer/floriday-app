@@ -1,5 +1,12 @@
 import nodemailer, { type Transporter } from "nodemailer";
-import { getEnv } from "@/lib/env";
+import { cookies } from "next/headers";
+import { getEnv, type Env } from "@/lib/env";
+import { isDemoModeAllowed } from "@/features/environment/environment-banner";
+import {
+  EMAIL_PROVIDER_COOKIE,
+  EMAIL_RECIPIENT_COOKIE,
+  resolveMailRouting,
+} from "@/features/environment/demo-mail-routing";
 
 export interface Mail {
   to: string;
@@ -8,46 +15,85 @@ export interface Mail {
   html: string;
 }
 
-let cached: Transporter | null = null;
-
 /**
- * Zonder SMTP-instellingen wordt een Ethereal-testaccount gebruikt: berichten komen dan
- * nergens echt aan, maar zijn wel via een link te bekijken. Dat voorkomt dat een halfaf
- * systeem echte mail naar collega's stuurt.
+ * Twee mogelijke transporters (SMTP/Resend en Ethereal), elk apart gecachet. Met een vaste
+ * keuze volstond één module-brede variabele; nu de e-mailschakelaar in de testbalk tussen
+ * beide kan omschakelen zou die ene cache verkeerd zijn - wie van test naar live schakelt
+ * (of terug) zou de vorige transporter blijven gebruiken totdat het proces herstart.
  */
-async function getTransporter(): Promise<Transporter> {
-  if (cached) return cached;
-  const env = getEnv();
+const transporterCache = new Map<"resend" | "ethereal", Promise<Transporter>>();
 
-  if (env.SMTP_HOST && env.SMTP_PORT && env.SMTP_USER && env.SMTP_PASSWORD) {
-    cached = nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_PORT === 465,
-      auth: { user: env.SMTP_USER, pass: env.SMTP_PASSWORD },
-    });
-    return cached;
-  }
-
+async function createEtherealTransporter(): Promise<Transporter> {
   const testAccount = await nodemailer.createTestAccount();
-  cached = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host: "smtp.ethereal.email",
     port: 587,
     secure: false,
     auth: { user: testAccount.user, pass: testAccount.pass },
   });
-  return cached;
+}
+
+/**
+ * Alleen aangeroepen wanneer `useResend` true is, en `resolveMailRouting` geeft dat alleen
+ * terug als `smtpConfigured` ook true was - de niet-null-asserties hieronder zijn dus veilig.
+ */
+function createResendTransporter(env: Env): Transporter {
+  return nodemailer.createTransport({
+    host: env.SMTP_HOST!,
+    port: env.SMTP_PORT!,
+    secure: env.SMTP_PORT === 465,
+    auth: { user: env.SMTP_USER!, pass: env.SMTP_PASSWORD! },
+  });
+}
+
+async function getTransporter(useResend: boolean, env: Env): Promise<Transporter> {
+  const key = useResend ? "resend" : "ethereal";
+  let transporter = transporterCache.get(key);
+  if (!transporter) {
+    transporter = useResend ? Promise.resolve(createResendTransporter(env)) : createEtherealTransporter();
+    transporterCache.set(key, transporter);
+  }
+  return transporter;
 }
 
 /** Geeft de preview-URL terug wanneer er via Ethereal is verstuurd, anders null. */
 export async function sendMail(mail: Mail): Promise<string | null> {
-  const transporter = await getTransporter();
   const env = getEnv();
+  const smtpConfigured = Boolean(env.SMTP_HOST && env.SMTP_PORT && env.SMTP_USER && env.SMTP_PASSWORD);
+
+  // Cookies worden alleen gelezen wanneer de testbalk zelf ook mag draaien (dezelfde
+  // VERCEL_ENV-regel als de balk). Op productie raakt mail.ts de cookies dus niet eens aan,
+  // ook niet als er per ongeluk nog een demo-cookie in de browser van een beheerder staat.
+  let providerCookie: string | undefined;
+  let recipientCookie: string | undefined;
+  if (isDemoModeAllowed(process.env.VERCEL_ENV)) {
+    try {
+      const store = await cookies();
+      providerCookie = store.get(EMAIL_PROVIDER_COOKIE)?.value;
+      recipientCookie = store.get(EMAIL_RECIPIENT_COOKIE)?.value;
+    } catch {
+      // `sendMail` wordt ook aangeroepen buiten een Next.js request om, vanuit losse
+      // scripts (`npm run invite`, `npm run create-admin`) - daar bestaat geen cookiejar en
+      // gooit `cookies()` "called outside a request scope". Dat is geen fout, gewoon geen
+      // demo-override beschikbaar: gedraag je dan als op productie.
+    }
+  }
+
+  const routing = resolveMailRouting({
+    vercelEnv: process.env.VERCEL_ENV,
+    smtpConfigured,
+    providerCookie,
+    recipientCookie,
+    to: mail.to,
+    subject: mail.subject,
+  });
+
+  const transporter = await getTransporter(routing.useResend, env);
 
   const info = await transporter.sendMail({
     from: env.MAIL_FROM ?? "Floriday middleware <noreply@coloriginz.com>",
-    to: mail.to,
-    subject: mail.subject,
+    to: routing.to,
+    subject: routing.subject,
     text: mail.text,
     html: mail.html,
   });
