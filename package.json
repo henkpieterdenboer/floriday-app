@@ -16,7 +16,8 @@
     "create-admin": "tsx scripts/create-admin.ts",
     "db:push": "node scripts/db-push.mjs",
     "db:push:dry": "node scripts/db-push.mjs --dry-run",
-    "invite": "tsx scripts/invite.ts"
+    "invite": "tsx scripts/invite.ts",
+    "export-aanbod": "tsx scripts/export-aanbod.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -45,6 +46,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "postcss": "^8.5.25",
     "prisma": "^6.19.3",
     "tailwindcss": "^4.3.3",
