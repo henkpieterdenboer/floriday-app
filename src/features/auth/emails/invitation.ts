@@ -23,7 +23,7 @@ export function buildInvitationMail(input: InvitationMailInput): Mail {
   const text = [
     `Hallo ${name},`,
     "",
-    "Je hebt toegang gekregen tot het aanbodoverzicht van Coloriginz.",
+    "Je hebt toegang gekregen tot het aanbod van Floriday.",
     "",
     `Stel hier je wachtwoord in: ${invitationUrl}`,
     `Deze link werkt tot ${formatDate(expiresAt)}.`,
@@ -32,11 +32,11 @@ export function buildInvitationMail(input: InvitationMailInput): Mail {
 
   const html = `
     <p>Hallo ${name},</p>
-    <p>Je hebt toegang gekregen tot het aanbodoverzicht van Coloriginz.</p>
+    <p>Je hebt toegang gekregen tot het aanbod van Floriday.</p>
     <p><a href="${invitationUrl}" style="background-color:#0f7b3f;color:#ffffff;padding:12px 20px;border-radius:6px;text-decoration:none;display:inline-block">Wachtwoord instellen</a></p>
     <p>Deze link werkt tot ${formatDate(expiresAt)}.</p>
     ${entraLine ? `<p>${entraLine}</p>` : ""}
   `.trim();
 
-  return { to, subject: "Toegang tot het aanbodoverzicht", text, html };
+  return { to, subject: "Toegang tot het aanbod van Floriday", text, html };
 }
