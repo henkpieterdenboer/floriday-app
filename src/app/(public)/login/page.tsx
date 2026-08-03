@@ -33,7 +33,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
           <CardTitle className="text-center text-2xl font-bold">Aanmelden</CardTitle>
           <CardDescription className="text-center">
-            Toegang tot het aanbodoverzicht van Coloriginz.
+            Toegang tot het aanbod van Floriday.
           </CardDescription>
         </CardHeader>
         <CardContent>
