@@ -45,17 +45,21 @@ export function LoginForm({ verder, entraEnabled, entraError }: LoginFormProps) 
   const entraFormRef = useRef<HTMLFormElement>(null);
 
   return (
-    <div className="flex flex-col gap-4">
-      {entraError ? (
-        <Alert variant="destructive">
-          <AlertDescription>{entraError}</AlertDescription>
-        </Alert>
-      ) : null}
+    <div>
+      {entraError || state.error ? (
+        <div className="mb-6 space-y-4">
+          {entraError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{entraError}</AlertDescription>
+            </Alert>
+          ) : null}
 
-      {state.error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
-        </Alert>
+          {state.error ? (
+            <Alert variant="destructive">
+              <AlertDescription>{state.error}</AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
       ) : null}
 
       {entraEnabled ? (
@@ -65,26 +69,31 @@ export function LoginForm({ verder, entraEnabled, entraError }: LoginFormProps) 
             <EntraSubmit formRef={entraFormRef} />
           </form>
 
-          <div className="relative">
+          <div className="relative my-6">
             <Separator />
-            <span className="absolute inset-0 flex items-center justify-center">
-              <span className="bg-card px-2 text-xs text-muted-foreground">
-                of met een wachtwoord
-              </span>
+            <span className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-sm text-muted-foreground">
+              of
             </span>
           </div>
         </>
       ) : null}
 
-      <form action={formAction} className="flex flex-col gap-4">
+      <form action={formAction} className="space-y-4">
         <input type="hidden" name="verder" value={verder} />
 
-        <div className="flex flex-col gap-1.5">
+        <div className="space-y-2">
           <Label htmlFor="email">E-mailadres</Label>
-          <Input id="email" name="email" type="email" autoComplete="email" required />
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="jij@bedrijf.nl"
+            required
+          />
         </div>
 
-        <div className="flex flex-col gap-1.5">
+        <div className="space-y-2">
           <Label htmlFor="password">Wachtwoord</Label>
           <Input
             id="password"
@@ -95,7 +104,7 @@ export function LoginForm({ verder, entraEnabled, entraError }: LoginFormProps) 
           />
         </div>
 
-        <Button type="submit" disabled={pending} className="mt-2">
+        <Button type="submit" disabled={pending} className="w-full">
           {pending ? "Bezig met aanmelden..." : "Aanmelden"}
         </Button>
       </form>

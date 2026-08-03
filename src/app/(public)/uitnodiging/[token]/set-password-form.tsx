@@ -21,7 +21,7 @@ export function SetPasswordForm({ token }: SetPasswordFormProps) {
 
   if (state.status === "success") {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="space-y-4">
         <Alert>
           <AlertDescription>
             Je wachtwoord is ingesteld. Je kunt nu aanmelden.
@@ -35,14 +35,14 @@ export function SetPasswordForm({ token }: SetPasswordFormProps) {
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-4">
+    <form action={formAction} className="space-y-4">
       {state.status === "error" && state.message ? (
         <Alert variant="destructive">
           <AlertDescription>{state.message}</AlertDescription>
         </Alert>
       ) : null}
 
-      <div className="flex flex-col gap-1.5">
+      <div className="space-y-2">
         <Label htmlFor="password">Wachtwoord</Label>
         <Input
           id="password"
@@ -54,7 +54,7 @@ export function SetPasswordForm({ token }: SetPasswordFormProps) {
         />
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="space-y-2">
         <Label htmlFor="confirmPassword">Wachtwoord herhalen</Label>
         <Input
           id="confirmPassword"
@@ -66,7 +66,7 @@ export function SetPasswordForm({ token }: SetPasswordFormProps) {
         />
       </div>
 
-      <Button type="submit" disabled={pending} className="mt-2">
+      <Button type="submit" disabled={pending} className="w-full">
         {pending ? "Bezig..." : "Wachtwoord instellen"}
       </Button>
     </form>

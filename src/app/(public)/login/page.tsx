@@ -19,16 +19,22 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <AuthShell backgroundImage="/brand/backgrounds/default.jpg" overlay="light">
-      <Card>
-        <CardHeader className="justify-items-center gap-3 text-center">
-          <BrandLogo
-            src="/brand/logos/coloriginz.png"
-            alt="Coloriginz"
-            variant="plain"
-            size="h-9"
-          />
-          <CardTitle>Aanmelden</CardTitle>
-          <CardDescription>Toegang tot het aanbodoverzicht van Coloriginz.</CardDescription>
+      {/* Maatvoering nagebouwd van de preview op /auth-pages-starter in het design system;
+          zie docs/design-system.md voor waarom de klassen hier expliciet staan. */}
+      <Card className="[--card-spacing:--spacing(6)]">
+        <CardHeader className="gap-2 space-y-4">
+          <div className="flex justify-center">
+            <BrandLogo
+              src="/brand/logos/coloriginz.png"
+              alt="Coloriginz"
+              variant="plain"
+              size="h-12"
+            />
+          </div>
+          <CardTitle className="text-center text-2xl font-bold">Aanmelden</CardTitle>
+          <CardDescription className="text-center">
+            Toegang tot het aanbodoverzicht van Coloriginz.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <LoginForm verder={verder} entraEnabled={entraEnabled} entraError={entraError} />

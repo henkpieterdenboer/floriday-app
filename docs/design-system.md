@@ -133,11 +133,56 @@ Bewust geen `NEXT_PUBLIC_DEMO_MODE`: die reist mee naar de browser en moet met d
 gezet worden. Vergeten op preview is hinderlijk, per ongeluk aan op productie is een gat.
 Uitgeschakeld geven beide routes 404, niet 403.
 
+## Kijk eerst naar de preview
+
+De repo `col-design-system` heeft naast `docs/items/*.md` een **preview-route per item**
+onder `app/<item>/page.tsx`. Draaien:
+
+```bash
+cd C:\HPProjects\col-design-system
+npx next dev --port 3100
+```
+
+Dan `http://localhost:3100/auth-pages-starter`, `/auth-shell`, `/sso-button`, enzovoort.
+
+De markdown vertelt wat de API is; de preview vertelt hoe het eruit hoort te zien - maten,
+gewichten, spacing, volgorde. Op `/auth-pages-starter` staat dat ook met zoveel woorden:
+*"Het uiterlijk is de standaard, de code is een startpunt."* Deze pagina's zijn de eerste
+keer gebouwd zonder die preview te bekijken en weken zichtbaar af (logo te klein, te weinig
+lucht, titel te licht). Zie `tasks/lessons.md`.
+
+### Onze card is niet hun card
+
+Het design system draait op de klassieke shadcn-card: `gap-6`, `py-6`, `px-6`, `border` +
+`shadow-sm`. Wij draaien op de **base-nova**-preset, waar dat `gap-(--card-spacing)` is met
+`--card-spacing: --spacing(4)` — 16px in plaats van 24px — en een `ring-1` in plaats van een
+border met schaduw.
+
+Dezelfde JSX levert daar dus meer lucht op dan hier. Op de auth-pagina's zetten we daarom
+`className="[--card-spacing:--spacing(6)]"` op de `Card`, wat padding én de afstand tussen
+header en content in één keer op de waarde van het design system brengt.
+
+De rand houden we wel base-nova: die is consistent met het aanbod- en beheerscherm, en een
+`ring-1` en een `border` van 1px zijn op een foto nauwelijks te onderscheiden.
+
 ## De auth-pagina's
 
 `/login` en `/uitnodiging/[token]` staan sinds 3 augustus 2026 in een `AuthShell`: de foto
 `public/brand/backgrounds/default.jpg` met `overlay="light"`, en daarop een kaart met het
 logo (`variant="plain"`, want een zwart woordmerk op een witte kaart) boven de titel.
+
+De maatvoering is nagebouwd van de preview en staat daarom expliciet in de JSX:
+
+| | Waarde | Waarom niet de default |
+|---|---|---|
+| `Card` | `[--card-spacing:--spacing(6)]` | base-nova staat op 4; zie hierboven |
+| `CardHeader` | `gap-2 space-y-4` | hun header heeft `gap-2`, de preview zet `space-y-4` erbij; onze header staat op `gap-1` |
+| `BrandLogo` | `size="h-12"` | default is `h-24`, de preview gebruikt `h-12` |
+| `CardTitle` | `text-center text-2xl font-bold` | onze default is `text-base font-medium` |
+| Separator | `my-6`, label `text-sm` | de ruimte eromheen komt niet uit een gap |
+
+Wat wij bewust anders houden dan de preview: geen taalkiezer (deze app is eentalig) en geen
+"wachtwoord vergeten" (een beheerder stuurt een nieuwe uitnodiging).
 
 De overlay van `AuthShell` is `absolute` binnen de shell en niet `fixed`. Daardoor blijft de
 testbalk erboven leesbaar in plaats van mee te verduisteren. Dat is een keuze van het item,
