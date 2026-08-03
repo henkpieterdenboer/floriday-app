@@ -1,4 +1,4 @@
-import { getEnv } from "@/lib/env";
+import { getFloridayEnv } from "@/lib/env";
 import { createFloridayClient, type FloridayClient } from "@/features/floriday/client/http";
 import { createRateLimiter } from "@/features/floriday/client/rate-limiter";
 import { createTokenCache } from "@/features/floriday/client/token-cache";
@@ -11,7 +11,9 @@ import { fetchAccessToken } from "@/features/floriday/client/token-request";
  * and reuse it, not call this per page.
  */
 export function createCustomersClient(): FloridayClient {
-  const env = getEnv();
+  // Hier gecontroleerd, niet bij het laden van de module: een omgeving zonder
+  // Floriday-gegevens moet gewoon kunnen inloggen en zoeken.
+  const env = getFloridayEnv();
 
   return createFloridayClient({
     baseUrl: env.FLORIDAY_CUSTOMERS_API_BASE_URL,

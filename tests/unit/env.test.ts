@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { envSchema, getEnv, resetEnvCache } from "@/lib/env";
+import { envSchema, getEnv, getFloridayEnv, resetEnvCache } from "@/lib/env";
 
 const valid = {
   DATABASE_URL: "postgresql://user:pass@host/db?sslmode=require",
@@ -20,9 +20,13 @@ describe("envSchema", () => {
     expect(result.FLORIDAY_CUSTOMERS_API_KEY).toBe("key");
   });
 
-  it("rejects a missing api key", () => {
-    const { FLORIDAY_CUSTOMERS_API_KEY, ...incomplete } = valid;
-    expect(() => envSchema.parse(incomplete)).toThrow();
+  // De Floriday-gegevens zijn hier bewust optioneel: een omgeving zonder die sleutels moet
+  // gewoon kunnen inloggen, gebruikers beheren en zoeken in wat er al opgehaald is. De
+  // strenge controle staat in getFloridayEnv, vlak voor er een verzoek uitgaat - zie de
+  // test daarvoor verderop.
+  it("accepts a configuration without floriday credentials", () => {
+    const { FLORIDAY_CUSTOMERS_API_KEY, ...zonderSleutel } = valid;
+    expect(() => envSchema.parse(zonderSleutel)).not.toThrow();
   });
 
   it("rejects an api base url that is not a url", () => {
@@ -90,5 +94,39 @@ describe("getEnv", () => {
     process.env = { ...process.env, CRON_SECRET: "changed" };
     const second = getEnv();
     expect(second.CRON_SECRET).toBe("changed");
+  });
+});
+
+describe("getFloridayEnv", () => {
+  const compleet = {
+    FLORIDAY_TOKEN_URL: "https://idm.staging.floriday.io/oauth2/x/v1/token",
+    FLORIDAY_CUSTOMERS_API_BASE_URL: "https://api.staging.floriday.io/customers-api-2026v1",
+    FLORIDAY_CUSTOMERS_CLIENT_ID: "abc",
+    FLORIDAY_CUSTOMERS_CLIENT_SECRET: "secret",
+    FLORIDAY_CUSTOMERS_API_KEY: "key",
+  };
+
+  const origineel = process.env;
+  afterEach(() => {
+    process.env = origineel;
+  });
+
+  it("geeft de gegevens terug wanneer alles er staat", () => {
+    process.env = { ...origineel, ...compleet };
+    expect(getFloridayEnv().FLORIDAY_CUSTOMERS_API_KEY).toBe("key");
+  });
+
+  it("weigert een ontbrekende api key en noemt het veld", () => {
+    process.env = { ...origineel, ...compleet };
+    delete process.env.FLORIDAY_CUSTOMERS_API_KEY;
+    expect(() => getFloridayEnv()).toThrow(/FLORIDAY_CUSTOMERS_API_KEY/);
+  });
+
+  // De melding moet duidelijk maken dat alleen de synchronisatie stilligt, niet de hele
+  // applicatie - anders gaat iemand zoeken naar een storing die er niet is.
+  it("zegt erbij dat de rest van de applicatie wel werkt", () => {
+    process.env = { ...origineel, ...compleet };
+    delete process.env.FLORIDAY_CUSTOMERS_CLIENT_ID;
+    expect(() => getFloridayEnv()).toThrow(/rest van de applicatie werkt wel/);
   });
 });

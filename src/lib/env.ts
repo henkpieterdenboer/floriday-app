@@ -3,11 +3,21 @@ import { z } from "zod";
 export const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DIRECT_URL: z.string().min(1),
-  FLORIDAY_TOKEN_URL: z.string().url(),
-  FLORIDAY_CUSTOMERS_API_BASE_URL: z.string().url(),
-  FLORIDAY_CUSTOMERS_CLIENT_ID: z.string().min(1),
-  FLORIDAY_CUSTOMERS_CLIENT_SECRET: z.string().min(1),
-  FLORIDAY_CUSTOMERS_API_KEY: z.string().min(1),
+
+  // De Floriday-gegevens zijn hier optioneel en worden pas streng gecontroleerd door
+  // getFloridayEnv(), vlak voordat er een verzoek uitgaat.
+  //
+  // Waarom niet gewoon verplicht: dan kan een omgeving zonder die gegevens helemaal niets,
+  // ook de dingen die er niets mee te maken hebben. Dat liep vast bij het aanmaken van de
+  // eerste beheerder op productie - gebruikersbeheer raakt Floriday nergens, maar de
+  // applicatie weigerde te starten. Een ontbrekende sleutel hoort de synchronisatie te
+  // blokkeren, niet het inloggen.
+  FLORIDAY_TOKEN_URL: z.string().url().optional(),
+  FLORIDAY_CUSTOMERS_API_BASE_URL: z.string().url().optional(),
+  FLORIDAY_CUSTOMERS_CLIENT_ID: z.string().optional(),
+  FLORIDAY_CUSTOMERS_CLIENT_SECRET: z.string().optional(),
+  FLORIDAY_CUSTOMERS_API_KEY: z.string().optional(),
+
   CRON_SECRET: z.string().min(1),
 
   // Zet op "false" om de uurlijkse synchronisatie stil te leggen. Bedoeld voor een omgeving
@@ -61,4 +71,40 @@ export function getEnv(): Env {
 /** Clears the cached environment. Exists for tests so each test can exercise a fresh configuration. */
 export function resetEnvCache(): void {
   cached = null;
+}
+
+const floridaySchema = z.object({
+  FLORIDAY_TOKEN_URL: z.string().url(),
+  FLORIDAY_CUSTOMERS_API_BASE_URL: z.string().url(),
+  FLORIDAY_CUSTOMERS_CLIENT_ID: z.string().min(1),
+  FLORIDAY_CUSTOMERS_CLIENT_SECRET: z.string().min(1),
+  FLORIDAY_CUSTOMERS_API_KEY: z.string().min(1),
+});
+
+export type FloridayEnv = z.infer<typeof floridaySchema>;
+
+/**
+ * De Floriday-gegevens, streng gecontroleerd.
+ *
+ * Apart van getEnv() omdat ze maar voor één ding nodig zijn: praten met Floriday. Alles
+ * daarbuiten - inloggen, gebruikersbeheer, het zoekscherm op reeds opgehaalde data - hoort
+ * te werken in een omgeving waar ze nog ontbreken. Dat is geen theorie: de productieomgeving
+ * bestond eerder dan de credentials, en zonder deze splitsing kon daar niet eens een
+ * beheerder worden aangemaakt.
+ *
+ * Roep dit aan vlak voordat er een verzoek uitgaat, niet bij het laden van een module.
+ */
+export function getFloridayEnv(): FloridayEnv {
+  const parsed = floridaySchema.safeParse(process.env);
+  if (!parsed.success) {
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join(", ");
+    throw new Error(
+      `Floriday is niet volledig geconfigureerd: ${details}. ` +
+        "Zonder deze gegevens kan er niet met Floriday gesynchroniseerd worden; " +
+        "de rest van de applicatie werkt wel.",
+    );
+  }
+  return parsed.data;
 }

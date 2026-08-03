@@ -4,7 +4,7 @@
  */
 import "dotenv/config";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { getEnv } from "@/lib/env";
+import { getFloridayEnv } from "@/lib/env";
 import { createFloridayClient } from "@/features/floriday/client/http";
 import { createRateLimiter } from "@/features/floriday/client/rate-limiter";
 import { createTokenCache } from "@/features/floriday/client/token-cache";
@@ -13,7 +13,7 @@ import { fetchAccessToken } from "@/features/floriday/client/token-request";
 const OUTPUT_DIR = "tests/fixtures";
 
 async function main(): Promise<void> {
-  const env = getEnv();
+  const env = getFloridayEnv();
   const client = createFloridayClient({
     baseUrl: env.FLORIDAY_CUSTOMERS_API_BASE_URL,
     apiKey: env.FLORIDAY_CUSTOMERS_API_KEY,

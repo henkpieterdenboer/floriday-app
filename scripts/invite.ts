@@ -50,16 +50,8 @@ async function main(): Promise<void> {
   const invitation = await createInvitation(user.id);
   const url = `${baseUrl}/uitnodiging/${invitation.token}`;
 
-  const preview = await sendMail(
-    buildInvitationMail({
-      to: user.email,
-      name: user.name,
-      invitationUrl: url,
-      expiresAt: invitation.expiresAt,
-      entraEnabled: false,
-    }),
-  );
-
+  // Eerst afdrukken, dan pas mailen: dit script is juist de terugvaloptie wanneer mail
+  // niet werkt, dus de link mag nooit van het versturen afhangen.
   console.log(`Uitnodiging voor ${user.email} (${user.role}):`);
   console.log(url);
   console.log("");
@@ -68,7 +60,24 @@ async function main(): Promise<void> {
     console.log("Let op: dit account had al een wachtwoord. Dat wordt overschreven zodra");
     console.log("de link gebruikt wordt; eerdere sessies blijven geldig tot ze verlopen.");
   }
-  if (preview) console.log(`Mail bekijken: ${preview}`);
+
+  try {
+    const preview = await sendMail(
+      buildInvitationMail({
+        to: user.email,
+        name: user.name,
+        invitationUrl: url,
+        expiresAt: invitation.expiresAt,
+        entraEnabled: false,
+      }),
+    );
+    if (preview) console.log(`Mail bekijken: ${preview}`);
+  } catch (error: unknown) {
+    console.log("");
+    console.log("De mail kon niet verstuurd worden:");
+    console.log(`  ${error instanceof Error ? error.message : String(error)}`);
+    console.log("Gebruik de link hierboven.");
+  }
 
   await prisma.$disconnect();
 }

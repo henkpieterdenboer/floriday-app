@@ -1,4 +1,4 @@
-import type { Env } from "@/lib/env";
+import type { FloridayEnv } from "@/lib/env";
 
 const SCOPES = [
   "role:app",
@@ -9,7 +9,7 @@ const SCOPES = [
   "delivery-conditions:read",
 ].join(" ");
 
-export async function fetchAccessToken(env: Env): Promise<string> {
+export async function fetchAccessToken(env: FloridayEnv): Promise<string> {
   const response = await fetch(env.FLORIDAY_TOKEN_URL, {
     method: "POST",
     headers: {

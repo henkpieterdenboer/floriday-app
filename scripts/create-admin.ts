@@ -41,19 +41,31 @@ async function main(): Promise<void> {
   const invitation = await createInvitation(user.id);
   const url = `${getEnv().APP_URL}/uitnodiging/${invitation.token}`;
 
-  const preview = await sendMail(
-    buildInvitationMail({
-      to: user.email,
-      name: user.name,
-      invitationUrl: url,
-      expiresAt: invitation.expiresAt,
-      entraEnabled: false,
-    }),
-  );
-
+  // Eerst afdrukken, dan pas mailen. Het account bestaat op dit punt al, dus een tweede
+  // poging zou geweigerd worden - als het versturen dan mislukt en de link stond er nog
+  // niet, kom je er niet meer in. Mailen kan om redenen buiten dit script mislukken: geen
+  // SMTP ingesteld, een geblokkeerde poort, een provider die dienst weigert.
   console.log(`Beheerder aangemaakt: ${user.email}`);
   console.log(`Uitnodiging: ${url}`);
-  if (preview) console.log(`Mail bekijken: ${preview}`);
+  console.log(`Geldig tot ${invitation.expiresAt.toLocaleDateString("nl-NL", { dateStyle: "long" })}.`);
+
+  try {
+    const preview = await sendMail(
+      buildInvitationMail({
+        to: user.email,
+        name: user.name,
+        invitationUrl: url,
+        expiresAt: invitation.expiresAt,
+        entraEnabled: false,
+      }),
+    );
+    if (preview) console.log(`Mail bekijken: ${preview}`);
+  } catch (error: unknown) {
+    console.log("");
+    console.log("De uitnodigingsmail kon niet verstuurd worden:");
+    console.log(`  ${error instanceof Error ? error.message : String(error)}`);
+    console.log("Gebruik de link hierboven; het account is gewoon aangemaakt.");
+  }
 
   await prisma.$disconnect();
 }
