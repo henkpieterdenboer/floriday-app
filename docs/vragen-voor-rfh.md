@@ -1,3 +1,32 @@
+# Mail aan Arjan, door Henk Pieter
+
+Beste Arjan,
+
+Zoals ook per Teams al even getikt, bijgaand alvast een mail met een paar vragen. Wellicht dat deze ook goed in het Slack kanaal passen, maar daarvoor hebben we de uitnodiging volgens mij nog niet binnen? Daarom ook alvast zo even.
+
+1. Grootste vraag zit eigenlijk rond wat de API serveert. De API is 'clock-presales-supply', maar is het ook alleen maar presales? Ik kreeg eerder de indruk van je (en ook als ik de documentatie lees) dat het juist ook het daadwerkelijke klokaanbod zou moeten zijn, maar uitsluitsel daarover is wel van belang
+2. In de data vinden we 'numberOfPieces'. Daalt dat nummer als er klokvoorverkoop plaatsvindt? Of is dit het origineel aangeboden aantal? Is er dan op een andere manier uit de API te halen welke pieces in de voorverkoop inmiddels verkocht zijn?
+3. We zien een status 'UNAVAILABLE' en nemen daarbij even aan dat een item dan niet meer available is voor voorverkoop en naar de klok gaat? 
+Bovenstaande vragen richten zich eigenlijk allemaal op de vraag hoe een aangemelde partij zich door KVV naar de klok beweegt en wat de data betekent die de API weergeeft.
+
+
+
+Daarbij: omdat het stage-data is, is het ook moeilijk met de live floriday pagina te valideren. Wellicht is het een idee om voor deze applicatie binnen afzienbare tijd door te stappen naar de productie-omgeving; dan kunnen we dit soort zaken ook zelf valideren. 
+
+Goed om elkaar nog even te spreken voor je vakantie denk ik? Ik zal het morgen iig nog even proberen.
+
+groet,
+Henk Pieter
+
+
+
+
+
+
+
+
+
+
 # Vragen voor Royal FloraHolland
 
 Opgesteld: 31 juli 2026, na de eerste volledige backfill van de staging-omgeving.
@@ -74,8 +103,9 @@ gebeuren. Hoe vaak wijzigt een regel op productie typisch tijdens het ordervenst
 > Dat bevestigt 2.1 grotendeels: het aantal is inderdaad de plek waar verkoop zichtbaar
 > wordt, en de prijs staat vast zodra de regel bestaat. Maar het valt vrijwel altijd in één
 > keer naar nul in plaats van geleidelijk af te lopen — één regel nam gedeeltelijk af, één
-> werd juist groter. Dat lijkt eerder op "partij afgesloten" dan op "stuk voor stuk
-> verkocht", en dat is precies het verschil dat wij willen archiveren.
+> werd juist groter. Daarnaast werden 145 regels UNAVAILABLE met hun aantal onaangeroerd,
+> wat eerder op "venster gesloten" lijkt dan op "verkocht". Dat is precies het verschil dat
+> wij willen archiveren.
 >
 > **Nieuwe vraag 2.2a:** zien we hier het einde van de voorverkoop in één klap, of mist onze
 > synchronisatie de tussenliggende standen doordat wij maar eens per uur kijken? Anders
