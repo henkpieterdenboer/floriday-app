@@ -186,31 +186,42 @@ beeld.
 ## 4b. Productkenmerken — de VBN-codelijst
 
 De kenmerken van een artikel komen binnen als paren van `vbnCode` en `vbnValueCode`, zonder
-namen. Wij zien **183 verschillende codes** in het aanbod. Vijf daarvan hebben we zelf
-kunnen vaststellen door in het RFH Pre-Auction-scherm producten op te zoeken die hun
-kenmerken wél uitgeschreven tonen, en te koppelen via het VBN-productnummer:
+namen. Wij zien **182 verschillende codes** in het aanbod.
 
-| Code | Betekenis | Waar we het aan zien |
+Dit hebben we grotendeels zelf opgelost: het zijn de VBN-kenmerkcodes van Floricode, en die
+lijsten staan publiek als pdf. Wij halen ze op met een script en koppelen ze aan de codes
+uit de API — daarmee hebben **155 van de 182 codes** een naam, inclusief alle tien de
+drukste:
+
+| Code | Naam | Aanbodregels |
 |---|---|---|
-| `S20` | Minimum steellengte (cm) | VBN 6325 en 889; ook 96% match met cm-maten in artikelnamen |
-| `S01` | Potmaat (cm) | VBN 53071: scherm "Potmaat 11 cm", onze data `S01=011` |
-| `S02` | Planthoogte incl. pot (cm) | VBN 53071: scherm "Min planthoogte 25 cm" |
-| `S05` | Rijpheidsstadium | VBN 6325: scherm "2-3", onze data `S05=023` |
-| `L11` | Aantal stelen per bos | VBN 6325 en 889: scherm "10", onze data `L11=010` |
+| `S98` | Kwaliteitsklasse | 525.711 |
+| `S62` | Land van herkomst | 396.217 |
+| `S05` | Rijpheidsstadium | 386.929 |
+| `S20` | Minimum steellengte | 301.554 |
+| `V14` | RFH-milieucertificeringsstatus | 270.054 |
+| `S15` | Transporthoogte | 265.389 |
+| `L11` | Aantal stelen per bos | 248.856 |
+| `S01` | Potmaat | 223.909 |
+| `S02` | Min. planthoogte incl. pot | 218.032 |
+| `S56` | Teeltwijze | 118.412 |
 
-**4b.1** Is er een codelijst die `vbnCode` en `vbnValueCode` naar leesbare namen vertaalt,
-en kunnen wij die via de API of als bestand krijgen? Nu leiden wij dit af uit een
-schermvergelijking, wat werkt maar niet houdbaar is: er zijn er nog 178 over, waaronder
-codes die op honderdduizenden aanbodregels zitten (`V14` op 270.054, `S15` op 264.495,
-`S50` op 20.534).
+Ter controle hebben we dit naast het RFH Pre-Auction-scherm gelegd, dat de kenmerken wél
+uitgeschreven toont. Gekoppeld via het VBN-productnummer klopt het: VBN 6325 toont
+"steellengte 60, rijpheid 2-3, stelen/bos 10" waar onze data `S20=070 S05=023 L11=010`
+heeft, en VBN 53071 "potmaat 11 cm" bij `S01=011`.
 
-**4b.2** Klopt onze aanname dat `S21` het gemiddelde gewicht in gram is en `S29` de minimum
-bloeiwijzelengte in cm? Bij VBN 889 (gladiool) toont het scherm die twee kenmerken, en dat
-zijn de enige codes die wij bij dat product nog niet konden plaatsen.
+**4b.1** Er blijven **27 codes over zonder naam**, waarvan enkele veel voorkomen: `P01` op
+104.939 aanbodregels, `P02` op 46.211, `K01` op 43.937, `K02` op 26.528, `P03` op 24.091.
+Die staan niet in de twee kenmerkcodelijsten die publiek staan (snijbloemen en planten). In
+welke lijst staan de P-, K- en A-codes, en kunnen wij daarbij?
 
-**4b.3** Zijn deze codes stabiel, of kan een code van betekenis veranderen? Wij slaan ze op
-zoals ze binnenkomen, maar als wij er zelf namen aan hangen willen we weten hoe hard die
-zijn.
+**4b.2** Is er een machineleesbare vorm van deze lijsten — via de API, als csv, of via
+FloriBook? Wij trekken de namen nu uit pdf's, wat werkt maar breekt zodra Floricode de
+opmaak verandert.
+
+**4b.3** Zijn deze codes stabiel, of kan een code van betekenis veranderen? Wij tonen de
+namen inmiddels in ons eigen overzicht, dus we willen weten hoe hard ze zijn.
 
 ---
 

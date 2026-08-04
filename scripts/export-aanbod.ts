@@ -44,6 +44,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/db";
+import { VBN_KENMERKCODES } from "@/features/floriday/vbn-kenmerkcodes";
 
 function readFlag(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
@@ -270,9 +271,9 @@ const KOLOMMEN: Kolom[] = [
     breedte: 12,
     bron: "opgezocht",
     toelichting:
-      "TradeItem.characteristics, VBN-code S20. Er is geen veld dat lengte heet; deze code is " +
-      "afgeleid uit de data - zie het blad Kenmerken. Leeg bij producten zonder lengte, zoals " +
-      "potplanten.",
+      "TradeItem.characteristics, VBN-code S20 - bij Floricode \"Minimum steellengte\". Er is " +
+      "geen veld dat lengte heet; het zit in de kenmerken. Leeg bij producten zonder " +
+      "steellengte, zoals potplanten - die hebben een potmaat.",
     waarde: (r, x) => {
       const waarde = kenmerk(x.artikelen.get(r.tradeItemId), "S20");
       return waarde === null ? null : Number(waarde);
@@ -1034,73 +1035,62 @@ async function haalKenmerkStatistiek(): Promise<KenmerkStatistiek[]> {
 }
 
 /**
- * Wat de codes betekenen, en waar dat vandaan komt.
+ * Extra toelichting bij codes waar de naam alleen niet genoeg zegt.
  *
- * De API levert geen namen bij deze codes. De eerste vijf zijn vastgesteld door in het
- * RFH Pre-Auction-scherm (pre-auction.royalfloraholland.com) producten op te zoeken die
- * hun kenmerken wél uitgeschreven tonen, en die te koppelen via het VBN-productnummer -
- * dat staat in beide bronnen. Voorbeelden:
- *
- *   VBN 6325  ACHIL F PARK VARIETY   scherm: steellengte 60, rijpheid 2-3, stelen/bos 10
- *                                    onze data: S20=070 S05=023 L11=010
- *   VBN 53071 ABEL GR CONFETTI       scherm: potmaat 11 cm, min planthoogte 25 cm
- *                                    onze data: S01=011 S02=022
- *   VBN 889   GLAD GR HUNTING SONG   scherm: steellengte, bloeiwijzelengte, rijpheid,
- *                                    gewicht, stelen/bos
- *                                    onze data: S20 S29 S05 S21 L11
- *
- * De laatste twee staan als vermoeden erbij: het scherm noemt die kenmerken voor dit
- * product, maar de exemplaren in staging zijn andere partijen dan die op productie, dus de
- * waarden zijn niet één op één te leggen. Bevestiging hoort van Floriday te komen; het blad
- * Kenmerken is daar de vraaglijst voor.
+ * De namen zelf komen uit VBN_KENMERKCODES, gegenereerd uit de publieke codelijsten van
+ * Floricode. Wat hier staat is wat wij er bovenop weten uit de data of uit het RFH
+ * Pre-Auction-scherm.
  */
-const BEKENDE_CODES: Record<string, string> = {
-  S20: "Minimum steellengte in cm. Zo genoemd in het RFH-scherm. Ook los bevestigd: van 129 " +
-    "artikelen met een cm-maat in hun naam kwam S20 er 124 mee overeen (96%). Meest " +
-    "voorkomend: 80, 70, 60 en 50 cm.",
-  S01: "Potmaat in cm. Scherm toont \"Potmaat 11 cm\" waar onze data S01=011 heeft.",
-  S02: "Planthoogte in cm, inclusief pot. Scherm toont \"Min planthoogte inclusief pot 25 cm\".",
-  S05: "Rijpheidsstadium. Scherm toont \"2-3\" waar onze data S05=023 heeft; de code leest als " +
-    "twee cijfers aan elkaar, niet als een getal.",
-  L11: "Aantal stelen per bos. Scherm toont \"10\" bij L11=010, veruit de meest voorkomende waarde.",
-  S98: "Kwaliteitsklasse. Alleen A1, A2, B1 en NV komen voor.",
-  S62: "Land van herkomst, als ISO-landcode.",
-  S21: "Vermoedelijk het gemiddelde gewicht in gram - nog niet bevestigd.",
-  S29: "Vermoedelijk de minimum bloeiwijzelengte in cm - nog niet bevestigd.",
+const EXTRA_TOELICHTING: Record<string, string> = {
+  S20: "Van 129 artikelen met een cm-maat in hun naam kwam S20 er 124 mee overeen (96%). " +
+    "Meest voorkomend: 80, 70, 60 en 50 cm.",
+  S05: "De code leest als twee cijfers aan elkaar, niet als een getal: S05=023 betekent " +
+    "stadium 2-3, zoals het RFH-scherm het toont.",
+  S98: "Alleen A1, A2, B1 en NV komen voor.",
+  S62: "ISO-landcode.",
+  S01: "De tegenhanger van steellengte: planten hebben een potmaat, snijbloemen een lengte.",
 };
 
 function bouwKenmerkenblad(boek: ExcelJS.Workbook, statistiek: KenmerkStatistiek[]): void {
   const blad = boek.addWorksheet("Kenmerken", { views: [{ state: "frozen", ySplit: 3 }] });
-  blad.columns = [
-    { header: "", width: 9 },
-    { header: "", width: 13 },
-    { header: "", width: 10 },
-    { header: "", width: 46 },
-    { header: "", width: 60 },
-  ];
+  // Alleen breedtes, geen headers: een lege header-definitie levert een spookrij op boven
+  // de eigen kop, en dan klopt de bevroren rij niet meer met wat je ziet.
+  blad.columns = [{ width: 9 }, { width: 13 }, { width: 10 }, { width: 46 }, { width: 60 }];
+
+  const naamloos = statistiek.filter((s) => !VBN_KENMERKCODES[s.code]).length;
 
   const kop = blad.addRow([
-    "Kenmerken van artikelen: VBN-code en waarde. De API levert geen namen bij deze codes.",
+    `Artikelkenmerken: VBN-code en waarde. De API stuurt alleen de codes mee; de namen komen ` +
+      `uit de publieke codelijsten van Floricode. Van de ${statistiek.length} codes in dit ` +
+      `aanbod hebben er ${statistiek.length - naamloos} een naam, ${naamloos} nog niet.`,
   ]);
   kop.font = { bold: true };
+  kop.getCell(1).alignment = { wrapText: true, vertical: "top" };
   blad.addRow([]);
 
   const rubriek = blad.addRow(["Code", "Aanbodregels", "Waarden", "Betekenis", "Waarden die voorkomen"]);
   rubriek.font = { bold: true };
 
-  const totaal = statistiek.reduce((max, s) => Math.max(max, s.regels), 0);
   for (const s of statistiek) {
+    const naam = VBN_KENMERKCODES[s.code];
+    const extra = EXTRA_TOELICHTING[s.code];
+    const betekenis = naam
+      ? extra
+        ? `${naam}. ${extra}`
+        : naam
+      : "";
+
     const rij = blad.addRow([
       s.code,
       s.regels,
       s.unieke,
-      BEKENDE_CODES[s.code] ?? "",
+      betekenis,
       s.waarden.length > 300 ? s.waarden.slice(0, 300) + " ..." : s.waarden,
     ]);
     rij.getCell(4).alignment = { wrapText: true, vertical: "top" };
     rij.getCell(5).alignment = { wrapText: true, vertical: "top" };
-    if (BEKENDE_CODES[s.code]) rij.getCell(1).font = { bold: true };
-    if (s.regels === totaal) rij.getCell(2).font = { bold: true };
+    // Zonder naam is het een vraag aan Floriday; die springen er zo uit.
+    if (!naam) rij.getCell(1).font = { bold: true, color: { argb: "FFB00020" } };
   }
   blad.getColumn(2).numFmt = "#,##0";
 }
@@ -1264,12 +1254,13 @@ async function main(): Promise<void> {
     `Een verse pagina van duizend opeenvolgende records uit de API bevatte duizend verschillende ` +
       `aanbodregels, zonder enige herhaling - de synchronisatiestroom levert geen mutatiegeschiedenis.`,
     `Productlengte zit niet in de aanbodregel maar in de kenmerken van het artikel, als VBN-code ` +
-      `S20. De API levert geen namen bij die codes; dat S20 de lengte in centimeters is, is ` +
-      `afgeleid door de codes te vergelijken met artikelnamen die hun maat zelf noemen - 124 van ` +
-      `129 kwamen exact overeen. Meest voorkomend zijn 80, 70, 60 en 50 cm. Van alle aanbodregels ` +
-      `heeft 57,3% een lengte; de rest zijn producten waarvoor lengte niet geldt, zoals potplanten. ` +
-      `Het blad Kenmerken toont alle codes die voorkomen, ook die waarvan wij de betekenis niet ` +
-      `kennen - een goede lijst om bij Floriday langs te lopen.`,
+      `S20 - bij Floricode "Minimum steellengte". Meest voorkomend zijn 80, 70, 60 en 50 cm. Van ` +
+      `alle aanbodregels heeft 57,3% een steellengte; de rest zijn producten waarvoor die niet ` +
+      `geldt, zoals potplanten - daar staat een potmaat (S01).`,
+    `De API stuurt kenmerken als kale codes mee, zonder namen. Die codes zijn geen Floriday-eigen ` +
+      `verzinsel maar de sectorstandaard van Floricode, en die lijsten staan publiek. Wij halen ze ` +
+      `op met scripts/haal-vbn-kenmerkcodes.mjs; het blad Kenmerken toont de namen daaruit. De ` +
+      `codes die daar rood staan hebben nog geen naam - dat is de vraaglijst voor Floriday.`,
   ];
   if (zonderKweker > 0) {
     bevindingen.push(`${zonderKweker} van de ${regels.length} regels verwijzen naar een kweker die ` +
