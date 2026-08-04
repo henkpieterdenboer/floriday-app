@@ -113,6 +113,8 @@ interface Kweker {
   companyGln: string | null;
   rfhRelationId: number | null;
   organizationType: string | null;
+  endDate: Date | null;
+  sequenceNumber: bigint;
 }
 
 interface Artikel {
@@ -123,6 +125,39 @@ interface Artikel {
   botanicalNames: string[];
   countryOfOriginIsoCodes: string[];
   characteristics: unknown;
+  photos: unknown;
+  packingConfigurations: unknown;
+  tradeItemVersion: number | null;
+  isDeleted: boolean;
+  sequenceNumber: bigint;
+  fetchedAt: Date;
+}
+
+interface Foto {
+  url: string | null;
+  type: string | null;
+  primary: boolean;
+}
+
+interface Verpakking {
+  package: { vbnPackageCode: number | null; customPackageId: string | null };
+  isPrimary: boolean;
+  loadCarrierType: string | null;
+  packagesPerLayer: number | null;
+  piecesPerPackage: number | null;
+  layersPerLoadCarrier: number | null;
+  additionalPricePerPiece: { value: number; currency: string } | null;
+  floricodeVrsPackagingId: string | null;
+}
+
+function lijst<T>(rauw: unknown): T[] {
+  return Array.isArray(rauw) ? (rauw as T[]) : [];
+}
+
+/** De verpakking die het artikel zelf als primair aanmerkt, anders de eerste die er is. */
+function primaireVerpakking(artikel: Artikel | undefined): Verpakking | undefined {
+  const alle = lijst<Verpakking>(artikel?.packingConfigurations);
+  return alle.find((v) => v.isPrimary) ?? alle[0];
 }
 
 interface Kenmerk {
@@ -483,6 +518,128 @@ const KOLOMMEN: Kolom[] = [
         .join(" ") || null,
   },
   {
+    kop: "Artikel verwijderd",
+    breedte: 17,
+    bron: "opgezocht",
+    toelichting:
+      "TradeItem.isDeleted. In het archief staan 217 verwijderde artikelen; aanbodregels die " +
+      "ernaar verwijzen blijven bestaan.",
+    waarde: (r, x) => {
+      const a = x.artikelen.get(r.tradeItemId);
+      return a === undefined ? null : a.isDeleted ? "ja" : "nee";
+    },
+  },
+  {
+    kop: "Artikelversie (artikel)",
+    breedte: 20,
+    bron: "opgezocht",
+    toelichting:
+      "TradeItem.tradeItemVersion - de versie die wij van het artikel hebben. Kan afwijken van " +
+      "de versie waar de aanbodregel naar verwijst.",
+    waarde: (r, x) => x.artikelen.get(r.tradeItemId)?.tradeItemVersion ?? null,
+  },
+  {
+    kop: "Aantal foto's",
+    breedte: 13,
+    bron: "opgezocht",
+    toelichting: "TradeItem.photos - hoeveel foto's het artikel heeft.",
+    waarde: (r, x) => lijst<Foto>(x.artikelen.get(r.tradeItemId)?.photos).length || null,
+  },
+  {
+    kop: "Primaire artikelfoto",
+    breedte: 46,
+    bron: "opgezocht",
+    toelichting: "TradeItem.photos - de url van de foto die als primair is aangemerkt.",
+    waarde: (r, x) => {
+      const fotos = lijst<Foto>(x.artikelen.get(r.tradeItemId)?.photos);
+      return leeg((fotos.find((f) => f.primary) ?? fotos[0])?.url);
+    },
+  },
+  {
+    kop: "Verpakkingsopties",
+    breedte: 17,
+    bron: "opgezocht",
+    toelichting:
+      "TradeItem.packingConfigurations - hoeveel verpakkingsvormen het artikel kent. De " +
+      "aanbodregel gebruikt er één; de kolommen hierna beschrijven de primaire.",
+    waarde: (r, x) =>
+      lijst<Verpakking>(x.artikelen.get(r.tradeItemId)?.packingConfigurations).length || null,
+  },
+  {
+    kop: "Toeslag per stuk",
+    breedte: 16,
+    bron: "opgezocht",
+    toelichting:
+      "packingConfigurations[primair].additionalPricePerPiece.value - opslag bovenop de prijs " +
+      "voor deze verpakkingsvorm. Staat niet op de aanbodregel zelf.",
+    waarde: (r, x) => primaireVerpakking(x.artikelen.get(r.tradeItemId))?.additionalPricePerPiece?.value ?? null,
+  },
+  {
+    kop: "Primaire verpakking",
+    breedte: 40,
+    bron: "opgezocht",
+    toelichting:
+      "packingConfigurations[primair], samengevat als VBN-code, drager en aantallen. Vergelijk " +
+      "met de verpakkingskolommen van de aanbodregel zelf.",
+    waarde: (r, x) => {
+      const v = primaireVerpakking(x.artikelen.get(r.tradeItemId));
+      if (!v) return null;
+      const delen = [
+        v.package?.vbnPackageCode !== null && v.package?.vbnPackageCode !== undefined
+          ? `VBN ${v.package.vbnPackageCode}`
+          : null,
+        leeg(v.loadCarrierType),
+        v.piecesPerPackage !== null ? `${v.piecesPerPackage} per verpakking` : null,
+        v.packagesPerLayer !== null ? `${v.packagesPerLayer} per laag` : null,
+        v.layersPerLoadCarrier !== null ? `${v.layersPerLoadCarrier} lagen` : null,
+      ].filter(Boolean);
+      return delen.join(", ") || null;
+    },
+  },
+  {
+    kop: "Kweker einddatum",
+    breedte: 18,
+    bron: "opgezocht",
+    toelichting:
+      "Organization.endDate. Gevuld bij 47.145 van de 67.342 organisaties - waarom dat er zoveel " +
+      "zijn is een open vraag aan Floriday.",
+    waarde: (r, x) => x.kwekers.get(r.supplierOrganizationId)?.endDate ?? null,
+  },
+  {
+    kop: "Kweker handelsnaam",
+    breedte: 30,
+    bron: "opgezocht",
+    toelichting: "Organization.commercialName - naast de statutaire naam in de kolom Kweker.",
+    waarde: (r, x) => leeg(x.kwekers.get(r.supplierOrganizationId)?.commercialName),
+  },
+  {
+    kop: "Artikel opgehaald op",
+    breedte: 20,
+    bron: "afgeleid",
+    toelichting: "TradeItem.fetchedAt - wanneer wij dit artikel voor het laatst ophaalden.",
+    waarde: (r, x) => x.artikelen.get(r.tradeItemId)?.fetchedAt ?? null,
+  },
+  {
+    kop: "Volgnummer artikel",
+    breedte: 17,
+    bron: "opgezocht",
+    toelichting: "TradeItem.sequenceNumber - eigen teller van de artikelenfeed.",
+    waarde: (r, x) => {
+      const s = x.artikelen.get(r.tradeItemId)?.sequenceNumber;
+      return s === undefined ? null : Number(s);
+    },
+  },
+  {
+    kop: "Volgnummer kweker",
+    breedte: 17,
+    bron: "opgezocht",
+    toelichting: "Organization.sequenceNumber - eigen teller van de organisatiefeed.",
+    waarde: (r, x) => {
+      const s = x.kwekers.get(r.supplierOrganizationId)?.sequenceNumber;
+      return s === undefined ? null : Number(s);
+    },
+  },
+  {
     kop: "Voor het eerst gezien",
     breedte: 22,
     bron: "afgeleid",
@@ -594,16 +751,23 @@ async function haalContext(regels: ExportRij[]): Promise<ExtraContext> {
   const [kwekerRijen, artikelRijen, bonRijen, reeksRijen] = await Promise.all([
     prisma.organization.findMany({
       where: { organizationId: { in: kwekerIds } },
+      // Elk veld van Organization; er is er geen dat de export bewust weglaat.
       select: {
         organizationId: true, name: true, commercialName: true, city: true,
         countryCode: true, companyGln: true, rfhRelationId: true, organizationType: true,
+        endDate: true, sequenceNumber: true,
       },
     }),
     prisma.tradeItem.findMany({
       where: { tradeItemId: { in: artikelIds } },
+      // Elk veld van TradeItem, inclusief de drie json-kolommen. Die zijn er eerder uit
+      // gebleven omdat ze niet zonder nadenken in een cel passen - en juist daar zat de
+      // productlengte in.
       select: {
         tradeItemId: true, name: true, vbnProductCode: true, code: true, gtin: true,
         botanicalNames: true, countryOfOriginIsoCodes: true, characteristics: true,
+        photos: true, packingConfigurations: true, tradeItemVersion: true, isDeleted: true,
+        sequenceNumber: true, fetchedAt: true,
       },
     }),
     // Geteld over het hele archief, niet over deze export: de vraag is hoe groot een partij
@@ -837,8 +1001,15 @@ function bouwToelichtingblad(
   zet("Herkomst", "");
   blad.addRow(["", "De regels komen uit onze eigen database, gevuld vanuit de Floriday customers-API " +
     "(endpoint /auction/clock-presales-supply/sync). Gemeten op een verse pagina van duizend records " +
-    "levert die API precies de vijfentwintig velden die wij ook opslaan - er wordt niets weggelaten " +
-    "bij het opslaan."]).getCell(2).alignment = { wrapText: true, vertical: "top" };
+    "levert die API precies de vijfentwintig velden die wij ook opslaan; bij het opslaan van een " +
+    "aanbodregel gaat niets verloren."]).getCell(2).alignment = { wrapText: true, vertical: "top" };
+  blad.addRow(["", "Een aanbodregel staat echter niet alleen: er hangen een artikel (TradeItem) en " +
+    "een kweker (Organization) aan, elk met eigen velden. Deze export bevat elk veld van alle drie " +
+    "de tabellen. Twee daarvan zijn samengevat in plaats van uitgeschreven, omdat het lijsten zijn: " +
+    "van de foto's staan het aantal en de primaire url erin, van de verpakkingsvormen het aantal " +
+    "plus de primaire uitgesplitst. De kenmerken van het artikel staan wél volledig in de kolom " +
+    "\"Alle kenmerken\", en het blad Kenmerken telt ze over het hele archief."])
+    .getCell(2).alignment = { wrapText: true, vertical: "top" };
   blad.addRow([]);
 
   zet("Wat opvalt", "");
