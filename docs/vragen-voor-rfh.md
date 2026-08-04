@@ -27,6 +27,8 @@ Henk Pieter
 
 
 
+
+
 # Vragen voor Royal FloraHolland
 
 Opgesteld: 31 juli 2026, na de eerste volledige backfill van de staging-omgeving.
@@ -126,6 +128,23 @@ op productie, en zo ja hoe vaak?
 `UNAVAILABLE`, en is het onverkochte deel dat doorschuift naar de klok ergens via de API
 zichtbaar?
 
+**2.6** Bij het bekijken van de 231 mutaties uit 2.2 viel iets op: **vrijwel geen enkele
+gemuteerde regel had een afleverbon.**
+
+| | Zonder `deliveryNoteReference` |
+|---|---|
+| Hele archief | 8,9% (46.972 van 526.820) |
+| Alleen `AVAILABLE` | 7,7% (70 van 913) |
+| **Regels die gemuteerd zijn** | **99,6% (230 van 231)** |
+
+Tegenover 8,9% in het archief als geheel lijkt dat geen toeval. Onze veronderstelling: een
+aanbodregel krijgt zijn afleverbon pas als de partij daadwerkelijk wordt aangeleverd, en
+regels die nog bewegen in de voorverkoop zijn dat punt nog niet gepasseerd.
+
+Klopt dat? Zo ja, dan is de aanwezigheid van een bonnummer voor ons een bruikbaar signaal
+dat een regel definitief is. Wij baseren dit nu op 231 mutaties op staging — te weinig om
+op te bouwen zonder bevestiging.
+
 ---
 
 ## 3. Staging versus productie
@@ -151,6 +170,41 @@ hoeveel tijd?
 **3.5** Wij zien veildatums tot **2 augustus 2027**, ruim een jaar vooruit (21 regels op die
 datum, 4 op 30-04-2027). Is dat staging-testdata, of wordt er op productie ook zo ver
 vooruit aanbod aangemaakt?
+
+> **Grotendeels beantwoord op 4 augustus 2026, door onszelf.** De regel van 30-04-2027 blijkt
+> voluit *"Agapanthus Blue - Presale Test"* te heten, met 998.319 stuks in één regel. Dat is
+> geen langetermijnaanbod maar een testrecord. Zie 3.6.
+
+**3.6** Het levende aanbod op staging is niet alleen klein, het is ook grotendeels
+kunstmatig. Van de **913 regels met status `AVAILABLE` is naar onze schatting 62% testdata**
+— 569 regels. Herkenbaar aan de naam, of aan een aantal stuks dat over tientallen regels
+geen enkele variatie vertoont:
+
+| Regels | Kweker | Artikel |
+|---|---|---|
+| 256 | M v.d. Knaap Cymbidium BV | CYMB T GEM. — alle 256 exact hetzelfde aantal |
+| 156 | Fa G.C. Kuipers | **TEST (do not delete)** |
+| 53 | Fa G.C. Kuipers | Purple Phalaenopsis **(DND)** — alle 53 exact 5.700 stuks |
+| 43 + 43 | Satter Phalaenopsis BV | Ema White / Rio Grande 12cm |
+| 14 | Mts. Handelskwekerij Borgstein | TU EN CASSINI |
+| 1 | Fa G.C. Kuipers | **Agapanthus Blue - Presale Test** — 998.319 stuks |
+| 1 | Kwekerij de Barreveld BV | **Daytrade-testplant** |
+| 1 + 1 | Zwettulips BV, W.T. Buis | artikel heet letterlijk **"test"** |
+
+Die 53 Phalaenopsis-regels zijn illustratief: identiek aantal, identieke verpakking,
+identiek fust, maar 37 verschillende prijzen tussen € 0,12 en € 0,91, verdeeld over drie
+veillocaties, aangemaakt in batches van enkele seconden. Wij hebben nagegaan dat ze
+werkelijk als 53 losse records met eigen `supplyLineId` uit de API komen — het is dus geen
+vertekening aan onze kant.
+
+**3.6a** Klopt het dat dit bewust klaargezette testdata is, en is er een manier om die te
+herkennen anders dan aan de productnaam? Een vlag of een aparte kweker-id zou ons helpen
+om staging-resultaten te beoordelen.
+
+**3.6b** Belangrijker: hierdoor blijven er zo'n **344 regels** over die op echt aanbod
+lijken, verdeeld over een handvol kwekers. Dat is te weinig om onze aannames over
+prijsverloop, ordervensters en mutatiegedrag op te toetsen. Dit is voor ons het sterkste
+argument om op korte termijn naar productie te gaan — zie ook de mail hierboven.
 
 ---
 
