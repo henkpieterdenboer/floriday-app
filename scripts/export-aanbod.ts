@@ -7,11 +7,12 @@
  * Gebruik:
  *   npm run export-aanbod
  *   npm run export-aanbod -- --rijen 2000
- *   npm run export-aanbod -- --selectie recent
- *   npm run export-aanbod -- --maxpartij 100
+ *   npm run export-aanbod -- --selectie beschikbaar
+ *   npm run export-aanbod -- --selectie mutaties
+ *   npm run export-aanbod -- --maxgroep 100
  *   npm run export-aanbod -- --env .env.lokaal-productie
  *
- * Drie manieren van selecteren:
+ * Vijf manieren van selecteren:
  *
  *   reeksen (standaard) - dezelfde kweker met hetzelfde artikel, over meerdere
  *     veilingdatums, gesorteerd op datum. Zo zie je onder elkaar hoe prijs en aantal van
@@ -24,6 +25,13 @@
  *     regel hebben. Regels met hetzelfde bonnummer zijn dus meestal toeval, geen partij.
  *
  *   recent - de hoogste sequencenummers, oftewel de laatst gewijzigde regels.
+ *
+ *   beschikbaar - alleen wat nog te koop staat. Een kleine verzameling: het archief bestaat
+ *     vrijwel geheel uit afgehandeld aanbod, want een regel wordt UNAVAILABLE zodra hij
+ *     verkocht of verlopen is.
+ *
+ *   mutaties - regels waarvan meer dan één versie is gezien, met alle versies onder elkaar.
+ *     Leest uit SupplyLineVersion in plaats van SupplyLine.
  *
  * De export komt uit onze eigen database, niet rechtstreeks uit de API. Dat is geen
  * beperking: gemeten op een verse pagina van duizend records levert de API precies de
@@ -82,6 +90,10 @@ interface ExportRij {
   photoUrl: string | null;
   firstSeenAt: Date;
   lastSeenAt: Date;
+  /** Alleen gevuld bij de selectie "mutaties": het hoeveelste beeld van deze regel dit is. */
+  versieNr?: number;
+  /** Alleen bij "mutaties": hoeveel versies deze regel in totaal heeft. */
+  versiesTotaal?: number;
 }
 
 /**
@@ -200,6 +212,16 @@ function getal(waarde: unknown): number | null {
 }
 
 const KOLOMMEN: Kolom[] = [
+  {
+    kop: "Versie",
+    breedte: 9,
+    bron: "afgeleid",
+    toelichting:
+      "Alleen bij de selectie \"mutaties\": het hoeveelste beeld dit is van dezelfde aanbodregel, " +
+      "als \"1 van 2\". De versies staan onder elkaar, oudste eerst.",
+    waarde: (r) =>
+      r.versieNr === undefined ? null : `${r.versieNr} van ${r.versiesTotaal ?? r.versieNr}`,
+  },
   {
     kop: "Reeks (kweker + artikel)",
     breedte: 18,
@@ -741,6 +763,44 @@ async function selecteerRecent(rijen: number): Promise<ExportRij[]> {
 }
 
 /**
+ * Aanbodregels waarvan meer dan één versie is gezien, met alle versies onder elkaar.
+ *
+ * Leest uit SupplyLineVersion in plaats van SupplyLine, want die laatste bewaart alleen de
+ * huidige stand. Elke versie wordt een eigen rij; firstSeenAt en lastSeenAt krijgen de
+ * waarneemtijd van die versie, zodat de kolommen dezelfde betekenis houden.
+ *
+ * Wat er in de praktijk verandert, gemeten over de eerste 231 mutaties: de status springt van
+ * AVAILABLE naar UNAVAILABLE (145 keer) en het aantal stuks valt terug naar nul (84 keer). De
+ * prijs per stuk veranderde geen enkele keer.
+ */
+async function selecteerMutaties(rijen: number): Promise<ExportRij[]> {
+  return prisma.$queryRaw<ExportRij[]>`
+    WITH meervoud AS (
+      SELECT "supplyLineId", count(*)::int AS versies
+      FROM "SupplyLineVersion" GROUP BY 1 HAVING count(*) > 1
+    ),
+    gekozen AS (
+      SELECT m.*, sum(m.versies) OVER (ORDER BY m."supplyLineId" ROWS UNBOUNDED PRECEDING) AS tot
+      FROM meervoud m
+    )
+    SELECT
+      v."supplyLineId", v.status, v."tradeItemId", v."tradeItemVersion", v."pricePerPiece",
+      v.currency, v."numberOfPieces", v."deliveryNoteReference", v."deliveryNoteCode",
+      v."deliveryNoteLetter", v."piecesPerPackage", v."vbnPackageCode", v."customPackageId",
+      v."packagesPerLayer", v."layersPerLoadCarrier", v."loadCarrier", v."tradePeriodStart",
+      v."tradePeriodEnd", v."supplierOrganizationId", v."sequenceNumber", v."creationDateTime",
+      v."lastModifiedDateTime", v."auctionDate", v."initialAuctionLocation", v."photoUrl",
+      v."observedAt" AS "firstSeenAt", v."observedAt" AS "lastSeenAt",
+      row_number() OVER (PARTITION BY v."supplyLineId" ORDER BY v."sequenceNumber")::int AS "versieNr",
+      g.versies AS "versiesTotaal"
+    FROM "SupplyLineVersion" v
+    JOIN gekozen g ON g."supplyLineId" = v."supplyLineId"
+    WHERE g.tot <= ${rijen}
+    ORDER BY v."supplyLineId", v."sequenceNumber"
+  `;
+}
+
+/**
  * Alleen wat op het moment van de laatste synchronisatie nog te koop stond.
  *
  * Dat is een kleine verzameling: 543 van de 525.458 regels, oftewel een tiende procent. Een
@@ -1055,9 +1115,10 @@ async function main(): Promise<void> {
   const maxGroep = readNumberFlag("maxgroep", 25);
   const selectieVlag = readFlag("selectie") ?? "reeksen";
 
-  if (!["reeksen", "bon", "recent", "beschikbaar"].includes(selectieVlag)) {
+  if (!["reeksen", "bon", "recent", "beschikbaar", "mutaties"].includes(selectieVlag)) {
     console.error(
-      `--selectie verwacht "reeksen", "bon", "recent" of "beschikbaar", kreeg "${selectieVlag}".`,
+      `--selectie verwacht "reeksen", "bon", "recent", "beschikbaar" of "mutaties", ` +
+        `kreeg "${selectieVlag}".`,
     );
     process.exit(1);
   }
@@ -1073,7 +1134,9 @@ async function main(): Promise<void> {
       ? await selecteerOpBon(rijen, maxGroep)
       : selectieVlag === "beschikbaar"
         ? await selecteerBeschikbaar(rijen)
-        : await selecteerRecent(rijen);
+        : selectieVlag === "mutaties"
+          ? await selecteerMutaties(rijen)
+          : await selecteerRecent(rijen);
 
   if (regels.length === 0) {
     console.error("Geen regels gevonden. Is het archief gevuld?");
@@ -1179,6 +1242,7 @@ async function main(): Promise<void> {
     bon: `bon (afleverbonnen met 2 t/m ${maxGroep} regels, grootste eerst)`,
     recent: "recent (hoogste volgnummers)",
     beschikbaar: "beschikbaar (alleen status AVAILABLE, op veilingdatum)",
+    mutaties: "mutaties (regels met meer dan een versie, alle versies onder elkaar)",
   }[selectieVlag] as string;
 
   bouwToelichtingblad(boek, {

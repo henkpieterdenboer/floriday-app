@@ -58,6 +58,29 @@ dan één versie**. Wij haalden alles in één keer op, dus we zagen elke regel 
 maar het betekent dat we het verloop dat we willen archiveren nog nooit hebben zien
 gebeuren. Hoe vaak wijzigt een regel op productie typisch tijdens het ordervenster?
 
+> **Deels beantwoord op 4 augustus 2026.** We hebben opnieuw gesynchroniseerd, drie dagen na
+> de eerste vulling, en toen wél mutaties gezien: **231 regels kregen een tweede versie**,
+> naast 1.362 volledig nieuwe regels.
+>
+> Wat er verandert, over die 231:
+>
+> | Veld | Aantal |
+> |---|---|
+> | `lastModifiedDateTime` | 231 (per definitie) |
+> | `status` van AVAILABLE naar UNAVAILABLE | 145 |
+> | `numberOfPieces` | 86, waarvan **84 naar nul** |
+> | `pricePerPiece` | **0** |
+>
+> Dat bevestigt 2.1 grotendeels: het aantal is inderdaad de plek waar verkoop zichtbaar
+> wordt, en de prijs staat vast zodra de regel bestaat. Maar het valt vrijwel altijd in één
+> keer naar nul in plaats van geleidelijk af te lopen — één regel nam gedeeltelijk af, één
+> werd juist groter. Dat lijkt eerder op "partij afgesloten" dan op "stuk voor stuk
+> verkocht", en dat is precies het verschil dat wij willen archiveren.
+>
+> **Nieuwe vraag 2.2a:** zien we hier het einde van de voorverkoop in één klap, of mist onze
+> synchronisatie de tussenliggende standen doordat wij maar eens per uur kijken? Anders
+> gezegd: hoe vaak zouden wij moeten synchroniseren om het werkelijke verloop te zien?
+
 **2.3** Wanneer krijgt een regel een nieuw `sequenceNumber`? Alleen bij een inhoudelijke
 wijziging, of ook bij technische operaties aan jullie kant (herindexering, migratie,
 datalaad)? Dit is voor ons belangrijk: wij schrijven alleen een archiefregel weg als er
