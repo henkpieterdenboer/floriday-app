@@ -948,21 +948,73 @@ async function haalVulgraad(): Promise<{ veld: string; gevuld: number; totaal: n
   return uit.sort((a, b) => b.gevuld - a.gevuld || a.veld.localeCompare(b.veld));
 }
 
-function bouwAanbodblad(boek: ExcelJS.Workbook, regels: ExportRij[], extra: ExtraContext): void {
-  const blad = boek.addWorksheet("Aanbod", { views: [{ state: "frozen", ySplit: 1, xSplit: 2 }] });
+/**
+ * Wat er in deze export bij elkaar hoort, en waarom.
+ *
+ * Verschilt per selectie: bij "bon" is dat het bonnummer, bij "mutaties" de aanbodregel
+ * waarvan meerdere versies bestaan, en verder de combinatie kweker + artikel - de enige
+ * groepering waarin opeenvolgende regels werkelijk over hetzelfde product gaan.
+ */
+function groepsSleutel(selectie: string): { naam: string; sleutel: (r: ExportRij) => string } {
+  if (selectie === "bon") {
+    return { naam: "Afleverbon", sleutel: (r) => r.deliveryNoteReference ?? "(geen bon)" };
+  }
+  if (selectie === "mutaties") {
+    return { naam: "Aanbodregel", sleutel: (r) => r.supplyLineId };
+  }
+  return {
+    naam: "Kweker + artikel",
+    sleutel: (r) => `${r.supplierOrganizationId}|${r.tradeItemId}`,
+  };
+}
 
-  blad.columns = KOLOMMEN.map((k) => ({ header: k.kop, key: k.kop, width: k.breedte }));
+/** Zachte tint om de ene groep van de volgende te onderscheiden; niets inhoudelijks. */
+const GROEPSTINT = "FFF2F5F9";
+
+function bouwAanbodblad(
+  boek: ExcelJS.Workbook,
+  regels: ExportRij[],
+  extra: ExtraContext,
+  selectie: string,
+): void {
+  const blad = boek.addWorksheet("Aanbod", { views: [{ state: "frozen", ySplit: 1, xSplit: 3 }] });
+
+  const { sleutel } = groepsSleutel(selectie);
+
+  // Groepsnummer als eerste kolom: zonder een veld om op te filteren of te sorteren is een
+  // groep in een blad van tientallen kolommen alleen met het oog terug te vinden.
+  blad.columns = [
+    { header: "Groep", key: "Groep", width: 8 },
+    ...KOLOMMEN.map((k) => ({ header: k.kop, key: k.kop, width: k.breedte })),
+  ];
   blad.getRow(1).font = { bold: true };
   blad.getRow(1).alignment = { vertical: "middle", wrapText: true };
   blad.getRow(1).height = 28;
 
+  let groepsNr = 0;
+  let vorigeSleutel: string | null = null;
+
   for (const regel of regels) {
-    blad.addRow(KOLOMMEN.map((k) => k.waarde(regel, extra)));
+    const huidige = sleutel(regel);
+    if (huidige !== vorigeSleutel) {
+      groepsNr += 1;
+      vorigeSleutel = huidige;
+    }
+
+    const rij = blad.addRow([groepsNr, ...KOLOMMEN.map((k) => k.waarde(regel, extra))]);
+
+    // Om en om arceren per groep, niet per rij: zo zie je de blokken zonder iets te sorteren.
+    if (groepsNr % 2 === 0) {
+      rij.eachCell({ includeEmpty: true }, (cel) => {
+        cel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GROEPSTINT } };
+      });
+    }
   }
 
   // Formaten per kolom, na het vullen: Excel toont een datum anders als een getal.
+  // Index + 2 omdat de groepskolom vooraan is bijgekomen.
   KOLOMMEN.forEach((k, index) => {
-    const kolom = blad.getColumn(index + 1);
+    const kolom = blad.getColumn(index + 2);
     if (k.kop === "Veilingdatum") kolom.numFmt = "dd-mm-yyyy";
     else if (k.toelichting.includes("DateTime") || k.kop.includes("gezien")) {
       kolom.numFmt = "dd-mm-yyyy hh:mm";
@@ -970,7 +1022,111 @@ function bouwAanbodblad(boek: ExcelJS.Workbook, regels: ExportRij[], extra: Extr
     else if (k.kop === "Stuks") kolom.numFmt = "#,##0";
   });
 
-  blad.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: KOLOMMEN.length } };
+  blad.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: KOLOMMEN.length + 1 } };
+}
+
+interface Groep {
+  nr: number;
+  regels: number;
+  kweker: string | null;
+  artikel: string | null;
+  bon: string | null;
+  lengte: number | null;
+  eersteDatum: Date;
+  laatsteDatum: Date;
+  minPrijs: number | null;
+  maxPrijs: number | null;
+  totaalStuks: number;
+  statussen: string;
+}
+
+/**
+ * Eén regel per groep, grootste eerst. Bedoeld als ingang: hier zie je meteen welke groepen
+ * meer dan één regel hebben, en met het groepsnummer vind je ze terug op het blad Aanbod.
+ */
+function bouwGroepenblad(
+  boek: ExcelJS.Workbook,
+  regels: ExportRij[],
+  extra: ExtraContext,
+  selectie: string,
+): void {
+  const { naam, sleutel } = groepsSleutel(selectie);
+
+  const perGroep = new Map<string, ExportRij[]>();
+  const volgorde: string[] = [];
+  for (const regel of regels) {
+    const s = sleutel(regel);
+    if (!perGroep.has(s)) {
+      perGroep.set(s, []);
+      volgorde.push(s);
+    }
+    perGroep.get(s)!.push(regel);
+  }
+
+  const groepen: Groep[] = volgorde.map((s, index) => {
+    const rijen = perGroep.get(s)!;
+    const eerste = rijen[0];
+    const prijzen = rijen.map((r) => getal(r.pricePerPiece)).filter((p): p is number => p !== null);
+    const datums = rijen.map((r) => r.auctionDate.getTime());
+    const lengte = kenmerk(extra.artikelen.get(eerste.tradeItemId), "S20");
+
+    return {
+      nr: index + 1,
+      regels: rijen.length,
+      kweker: leeg(extra.kwekers.get(eerste.supplierOrganizationId)?.name),
+      artikel: leeg(extra.artikelen.get(eerste.tradeItemId)?.name),
+      bon: leeg(eerste.deliveryNoteReference),
+      lengte: lengte === null ? null : Number(lengte),
+      eersteDatum: new Date(Math.min(...datums)),
+      laatsteDatum: new Date(Math.max(...datums)),
+      minPrijs: prijzen.length ? Math.min(...prijzen) : null,
+      maxPrijs: prijzen.length ? Math.max(...prijzen) : null,
+      totaalStuks: rijen.reduce((som, r) => som + r.numberOfPieces, 0),
+      statussen: [...new Set(rijen.map((r) => r.status))].sort().join(" + "),
+    };
+  });
+
+  groepen.sort((a, b) => b.regels - a.regels || a.nr - b.nr);
+
+  const blad = boek.addWorksheet("Groepen", { views: [{ state: "frozen", ySplit: 3 }] });
+  blad.columns = [
+    { width: 8 }, { width: 9 }, { width: 30 }, { width: 34 }, { width: 11 },
+    { width: 14 }, { width: 13 }, { width: 13 }, { width: 12 }, { width: 12 },
+    { width: 13 }, { width: 22 },
+  ];
+
+  const meerdere = groepen.filter((g) => g.regels > 1).length;
+  const kop = blad.addRow([
+    `Groepen in deze export, gegroepeerd op ${naam.toLowerCase()}. ${groepen.length} groepen, ` +
+      `waarvan ${meerdere} met meer dan één regel. Grootste eerst. Zoek het groepsnummer op ` +
+      `het blad Aanbod om de regels zelf te zien; daar zijn de groepen ook om en om gearceerd.`,
+  ]);
+  kop.font = { bold: true };
+  kop.getCell(1).alignment = { wrapText: true, vertical: "top" };
+  blad.getRow(1).height = 30;
+  blad.addRow([]);
+
+  const rubriek = blad.addRow([
+    "Groep", "Regels", "Kweker", "Artikel", "Lengte (cm)", "Afleverbon",
+    "Eerste datum", "Laatste datum", "Min prijs", "Max prijs", "Totaal stuks", "Status",
+  ]);
+  rubriek.font = { bold: true };
+
+  for (const g of groepen) {
+    const rij = blad.addRow([
+      g.nr, g.regels, g.kweker, g.artikel, g.lengte, g.bon,
+      g.eersteDatum, g.laatsteDatum, g.minPrijs, g.maxPrijs, g.totaalStuks, g.statussen,
+    ]);
+    // Meer dan één regel is precies waar dit blad voor bestaat; die springen eruit.
+    if (g.regels > 1) rij.getCell(2).font = { bold: true };
+  }
+
+  blad.getColumn(7).numFmt = "dd-mm-yyyy";
+  blad.getColumn(8).numFmt = "dd-mm-yyyy";
+  blad.getColumn(9).numFmt = "#,##0.0000";
+  blad.getColumn(10).numFmt = "#,##0.0000";
+  blad.getColumn(11).numFmt = "#,##0";
+  blad.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: 12 } };
 }
 
 function bouwVeldenblad(
@@ -1275,7 +1431,8 @@ async function main(): Promise<void> {
   boek.creator = "Floriday middleware";
   boek.created = new Date();
 
-  bouwAanbodblad(boek, regels, extra);
+  bouwGroepenblad(boek, regels, extra, selectieVlag);
+  bouwAanbodblad(boek, regels, extra, selectieVlag);
   bouwVeldenblad(boek, vulgraad);
   bouwKenmerkenblad(boek, kenmerkStatistiek);
   const selectieTekst = {
