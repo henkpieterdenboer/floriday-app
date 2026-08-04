@@ -183,6 +183,37 @@ beeld.
 
 ---
 
+## 4b. Productkenmerken — de VBN-codelijst
+
+De kenmerken van een artikel komen binnen als paren van `vbnCode` en `vbnValueCode`, zonder
+namen. Wij zien **183 verschillende codes** in het aanbod. Vijf daarvan hebben we zelf
+kunnen vaststellen door in het RFH Pre-Auction-scherm producten op te zoeken die hun
+kenmerken wél uitgeschreven tonen, en te koppelen via het VBN-productnummer:
+
+| Code | Betekenis | Waar we het aan zien |
+|---|---|---|
+| `S20` | Minimum steellengte (cm) | VBN 6325 en 889; ook 96% match met cm-maten in artikelnamen |
+| `S01` | Potmaat (cm) | VBN 53071: scherm "Potmaat 11 cm", onze data `S01=011` |
+| `S02` | Planthoogte incl. pot (cm) | VBN 53071: scherm "Min planthoogte 25 cm" |
+| `S05` | Rijpheidsstadium | VBN 6325: scherm "2-3", onze data `S05=023` |
+| `L11` | Aantal stelen per bos | VBN 6325 en 889: scherm "10", onze data `L11=010` |
+
+**4b.1** Is er een codelijst die `vbnCode` en `vbnValueCode` naar leesbare namen vertaalt,
+en kunnen wij die via de API of als bestand krijgen? Nu leiden wij dit af uit een
+schermvergelijking, wat werkt maar niet houdbaar is: er zijn er nog 178 over, waaronder
+codes die op honderdduizenden aanbodregels zitten (`V14` op 270.054, `S15` op 264.495,
+`S50` op 20.534).
+
+**4b.2** Klopt onze aanname dat `S21` het gemiddelde gewicht in gram is en `S29` de minimum
+bloeiwijzelengte in cm? Bij VBN 889 (gladiool) toont het scherm die twee kenmerken, en dat
+zijn de enige codes die wij bij dat product nog niet konden plaatsen.
+
+**4b.3** Zijn deze codes stabiel, of kan een code van betekenis veranderen? Wij slaan ze op
+zoals ze binnenkomen, maar als wij er zelf namen aan hangen willen we weten hoe hard die
+zijn.
+
+---
+
 ## 5. Datakwaliteit — dingen die we tegenkwamen
 
 Geen van deze punten blokkeert ons; ze zijn allemaal opgevangen. Maar we willen weten of

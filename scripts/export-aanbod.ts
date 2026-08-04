@@ -279,6 +279,28 @@ const KOLOMMEN: Kolom[] = [
     },
   },
   {
+    kop: "Potmaat (cm)",
+    breedte: 12,
+    bron: "opgezocht",
+    toelichting:
+      "TradeItem.characteristics, VBN-code S01. De tegenhanger van lengte: planten hebben een " +
+      "potmaat waar snijbloemen een steellengte hebben, zelden allebei.",
+    waarde: (r, x) => {
+      const waarde = kenmerk(x.artikelen.get(r.tradeItemId), "S01");
+      return waarde === null ? null : Number(waarde);
+    },
+  },
+  {
+    kop: "Stelen per bos",
+    breedte: 14,
+    bron: "opgezocht",
+    toelichting: "TradeItem.characteristics, VBN-code L11.",
+    waarde: (r, x) => {
+      const waarde = kenmerk(x.artikelen.get(r.tradeItemId), "L11");
+      return waarde === null ? null : Number(waarde);
+    },
+  },
+  {
     kop: "Kwaliteit",
     breedte: 11,
     bron: "opgezocht",
@@ -1011,11 +1033,40 @@ async function haalKenmerkStatistiek(): Promise<KenmerkStatistiek[]> {
   `;
 }
 
+/**
+ * Wat de codes betekenen, en waar dat vandaan komt.
+ *
+ * De API levert geen namen bij deze codes. De eerste vijf zijn vastgesteld door in het
+ * RFH Pre-Auction-scherm (pre-auction.royalfloraholland.com) producten op te zoeken die
+ * hun kenmerken wél uitgeschreven tonen, en die te koppelen via het VBN-productnummer -
+ * dat staat in beide bronnen. Voorbeelden:
+ *
+ *   VBN 6325  ACHIL F PARK VARIETY   scherm: steellengte 60, rijpheid 2-3, stelen/bos 10
+ *                                    onze data: S20=070 S05=023 L11=010
+ *   VBN 53071 ABEL GR CONFETTI       scherm: potmaat 11 cm, min planthoogte 25 cm
+ *                                    onze data: S01=011 S02=022
+ *   VBN 889   GLAD GR HUNTING SONG   scherm: steellengte, bloeiwijzelengte, rijpheid,
+ *                                    gewicht, stelen/bos
+ *                                    onze data: S20 S29 S05 S21 L11
+ *
+ * De laatste twee staan als vermoeden erbij: het scherm noemt die kenmerken voor dit
+ * product, maar de exemplaren in staging zijn andere partijen dan die op productie, dus de
+ * waarden zijn niet één op één te leggen. Bevestiging hoort van Floriday te komen; het blad
+ * Kenmerken is daar de vraaglijst voor.
+ */
 const BEKENDE_CODES: Record<string, string> = {
-  S20: "Lengte in cm. Afgeleid uit de data: van 129 artikelen met een cm-maat in hun naam kwam " +
-    "S20 er 124 mee overeen (96%). Meest voorkomend: 80, 70, 60 en 50 cm.",
+  S20: "Minimum steellengte in cm. Zo genoemd in het RFH-scherm. Ook los bevestigd: van 129 " +
+    "artikelen met een cm-maat in hun naam kwam S20 er 124 mee overeen (96%). Meest " +
+    "voorkomend: 80, 70, 60 en 50 cm.",
+  S01: "Potmaat in cm. Scherm toont \"Potmaat 11 cm\" waar onze data S01=011 heeft.",
+  S02: "Planthoogte in cm, inclusief pot. Scherm toont \"Min planthoogte inclusief pot 25 cm\".",
+  S05: "Rijpheidsstadium. Scherm toont \"2-3\" waar onze data S05=023 heeft; de code leest als " +
+    "twee cijfers aan elkaar, niet als een getal.",
+  L11: "Aantal stelen per bos. Scherm toont \"10\" bij L11=010, veruit de meest voorkomende waarde.",
   S98: "Kwaliteitsklasse. Alleen A1, A2, B1 en NV komen voor.",
   S62: "Land van herkomst, als ISO-landcode.",
+  S21: "Vermoedelijk het gemiddelde gewicht in gram - nog niet bevestigd.",
+  S29: "Vermoedelijk de minimum bloeiwijzelengte in cm - nog niet bevestigd.",
 };
 
 function bouwKenmerkenblad(boek: ExcelJS.Workbook, statistiek: KenmerkStatistiek[]): void {
