@@ -740,6 +740,25 @@ async function selecteerRecent(rijen: number): Promise<ExportRij[]> {
   `;
 }
 
+/**
+ * Alleen wat op het moment van de laatste synchronisatie nog te koop stond.
+ *
+ * Dat is een kleine verzameling: 543 van de 525.458 regels, oftewel een tiende procent. Een
+ * regel wordt UNAVAILABLE zodra hij verkocht of verlopen is, en dat is meteen zijn laatste
+ * wijziging - daarom bestaan de andere selecties vrijwel uitsluitend uit UNAVAILABLE regels.
+ *
+ * Op veilingdatum gesorteerd in plaats van op volgnummer: bij levend aanbod is de vraag
+ * wanneer iets op de klok komt, niet wanneer het voor het laatst gewijzigd werd.
+ */
+async function selecteerBeschikbaar(rijen: number): Promise<ExportRij[]> {
+  return prisma.$queryRaw<ExportRij[]>`
+    SELECT * FROM "SupplyLine"
+    WHERE status = 'AVAILABLE'
+    ORDER BY "auctionDate", "supplierOrganizationId", "tradeItemId"
+    LIMIT ${rijen}
+  `;
+}
+
 async function haalContext(regels: ExportRij[]): Promise<ExtraContext> {
   const kwekerIds = [...new Set(regels.map((r) => r.supplierOrganizationId))];
   const artikelIds = [...new Set(regels.map((r) => r.tradeItemId))];
@@ -1036,8 +1055,10 @@ async function main(): Promise<void> {
   const maxGroep = readNumberFlag("maxgroep", 25);
   const selectieVlag = readFlag("selectie") ?? "reeksen";
 
-  if (!["reeksen", "bon", "recent"].includes(selectieVlag)) {
-    console.error(`--selectie verwacht "reeksen", "bon" of "recent", kreeg "${selectieVlag}".`);
+  if (!["reeksen", "bon", "recent", "beschikbaar"].includes(selectieVlag)) {
+    console.error(
+      `--selectie verwacht "reeksen", "bon", "recent" of "beschikbaar", kreeg "${selectieVlag}".`,
+    );
     process.exit(1);
   }
 
@@ -1050,7 +1071,9 @@ async function main(): Promise<void> {
     ? await selecteerOpReeksen(rijen, maxGroep)
     : selectieVlag === "bon"
       ? await selecteerOpBon(rijen, maxGroep)
-      : await selecteerRecent(rijen);
+      : selectieVlag === "beschikbaar"
+        ? await selecteerBeschikbaar(rijen)
+        : await selecteerRecent(rijen);
 
   if (regels.length === 0) {
     console.error("Geen regels gevonden. Is het archief gevuld?");
@@ -1083,11 +1106,35 @@ async function main(): Promise<void> {
         GROUP BY 1 HAVING count(DISTINCT "supplierOrganizationId") > 1) t) AS "bonMeerKwekers"
   `;
 
+  const [levend] = await prisma.$queryRaw<
+    { av: bigint; van: Date | null; tot: Date | null; kwekers: bigint; artikelen: bigint; gezien: Date }[]
+  >`
+    SELECT
+      count(*) FILTER (WHERE status = 'AVAILABLE') AS av,
+      min("auctionDate") FILTER (WHERE status = 'AVAILABLE') AS van,
+      max("auctionDate") FILTER (WHERE status = 'AVAILABLE') AS tot,
+      count(DISTINCT "supplierOrganizationId") FILTER (WHERE status = 'AVAILABLE') AS kwekers,
+      count(DISTINCT "tradeItemId") FILTER (WHERE status = 'AVAILABLE') AS artikelen,
+      max("lastSeenAt") AS gezien
+    FROM "SupplyLine"
+  `;
+
   const nl = (n: bigint) => Number(n).toLocaleString("nl-NL");
+  const dag = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "-");
   const pct = (deel: bigint, geheel: bigint) =>
     `${((Number(deel) / Number(geheel)) * 100).toFixed(1)}%`;
 
   const bevindingen = [
+    `Bijna alles in dit archief staat op UNAVAILABLE: slechts ${nl(levend.av)} van de ` +
+      `${nl(tellingen.regels)} regels is AVAILABLE, een tiende procent. Dat is geen fout in de ` +
+      `selectie - een regel wordt UNAVAILABLE zodra hij verkocht of verlopen is, en het archief ` +
+      `bestaat vrijwel geheel uit afgehandeld aanbod. Wie het levende aanbod wil zien, draait ` +
+      `"npm run export-aanbod -- --selectie beschikbaar".`,
+    `Dat levende aanbod is klein en smal: ${nl(levend.av)} regels van ${nl(levend.kwekers)} kwekers ` +
+      `over ${nl(levend.artikelen)} artikelen, met veilingdatums van ${dag(levend.van)} tot ` +
+      `${dag(levend.tot)}. Dat laatste is opvallend - er zit aanbod bij met een veilingdatum bijna ` +
+      `een jaar vooruit. De laatste geslaagde synchronisatie was ${dag(levend.gezien)}, dus dit is ` +
+      `de stand van toen en niet van vandaag.`,
     `Het archief bevat ${nl(tellingen.regels)} aanbodregels en ${nl(tellingen.versies)} versies - ` +
       `precies evenveel. Van geen enkele regel is ooit een tweede versie gezien. Dat komt doordat de ` +
       `backfill historische data ophaalde: die regels waren al klaar toen wij ze voor het eerst zagen.`,
@@ -1131,6 +1178,7 @@ async function main(): Promise<void> {
       `op veilingdatum)`,
     bon: `bon (afleverbonnen met 2 t/m ${maxGroep} regels, grootste eerst)`,
     recent: "recent (hoogste volgnummers)",
+    beschikbaar: "beschikbaar (alleen status AVAILABLE, op veilingdatum)",
   }[selectieVlag] as string;
 
   bouwToelichtingblad(boek, {
