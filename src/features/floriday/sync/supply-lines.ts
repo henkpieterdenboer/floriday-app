@@ -159,15 +159,22 @@ export async function syncSupplyLines(
     // page that was actually full but had some records skipped is not mistaken for a short
     // one.
     //
-    // maximumSequenceNumber is deliberately NOT used for this check. It reads like it
-    // should be a stable bound for the whole feed ("you are up to date when your cursor
-    // equals it" per Floriday's docs), but measured against the real API it is scoped to
-    // the page just returned: querying the same cursor with a smaller limit returns a
-    // smaller maximumSequenceNumber, and it always exactly equals the highest sequence
-    // number in that response's own results. Comparing our post-page cursor (also the
-    // page's own max) against it is therefore comparing a number to itself - true on
-    // every full page regardless of how much more data remains beyond it, which is
-    // exactly what a length check does not get wrong.
+    // The maximumSequenceNumber inside the sync response is deliberately NOT used for this
+    // check. It reads like it should be a stable bound for the whole feed ("you are up to
+    // date when your cursor equals it" per Floriday's docs), but measured against the real
+    // API it is scoped to the page just returned: querying the same cursor with a smaller
+    // limit returns a smaller maximumSequenceNumber, and it always exactly equals the
+    // highest sequence number in that response's own results. Comparing our post-page
+    // cursor (also the page's own max) against it is therefore comparing a number to
+    // itself - true on every full page regardless of how much more data remains beyond it,
+    // which is exactly what a length check does not get wrong.
+    //
+    // There IS a trustworthy bound, on a separate endpoint:
+    // GET /auction/clock-presales-supply/max-sequence-number returns a bare number for the
+    // whole feed. Verified 4 August 2026: it returned 501532193, exactly the highest
+    // sequence number we hold. Not wired in here because the length check already ends the
+    // loop correctly; it is worth having as a cheap "are we actually caught up" probe for
+    // the sync report, where today we can only say "the last page was short".
     if (rawResults.length < pageSize) {
       reachedEnd = true;
       break;

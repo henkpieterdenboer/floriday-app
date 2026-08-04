@@ -56,16 +56,60 @@ beschrijft het juist als een compleet aanbod: *"Het aanbod via de API is heel co
 Welke van de twee klopt, en welk deel van het werkelijke klokaanbod zien wij via
 `clock-presales-supply`?
 
+> **Bijgesteld op 4 augustus 2026.** Twee correcties op onze eigen aanname hierboven, uit
+> jullie documentatie:
+>
+> - Voorverkoop loopt **niet** uitsluitend via FloraMondo. De documentatie noemt
+>   *"RFH (FloraMondo), VRM en Plantion auction sales channels"*.
+> - Voorverkoop is een **fase vóór de klok**, geen deelverzameling ervan. Onverkochte
+>   voorverkoop wordt klok-supply (zie 2.5).
+>
+> Wat daarmee de kernvraag wordt: **komt élke klokpartij eerst in de voorverkoop, of gaat
+> een deel rechtstreeks naar de klok zonder ooit in `clock-presales-supply` te verschijnen?**
+> Bij het eerste zien wij alles, alleen in zijn voorverkoop-vorm. Bij het tweede is ons
+> overzicht structureel onvolledig, en dat moeten wij intern weten voordat we dit "het
+> klokaanbod" noemen.
+
 **1.2** Aan de customers-kant bestaat `/auction/clock-supply/{supplyLineId}` alleen per
 individueel ID — er is geen lijst- of sync-endpoint. Aan de suppliers-kant bestaat die
 volledige sync wél. Voorziet de roadmap in een sync-endpoint op clock supply voor kopers?
 Zo ja, wanneer?
+
+> **Aangescherpt op 4 augustus 2026 na uitproberen.** Dit is voor ons het zwaarste punt
+> geworden, want het endpoint is voor ons in de praktijk onbereikbaar:
+>
+> - `/auction/clock-supply/{id}` met een `supplyLineId` uit clock-presales geeft
+>   **404 "ClockSupplyLine ... was not found"**. Klok en voorverkoop gebruiken dus
+>   verschillende identifiers.
+> - `/auction/clock-supply/sync/0` geeft **404 `route-not-found`** — de route bestaat niet.
+> - De enige koppeling die er is, `clockPresalesSupplyReference`, zit **op** `ClockSupplyLine`
+>   en wijst naar de voorverkoop. Wij hebben de voorverkoopregel en zoeken de klokregel; die
+>   verwijzing loopt dus precies de verkeerde kant op.
+>
+> Netto: wij kunnen een `ClockSupplyLine` alleen ophalen als we het id al kennen, en er is
+> geen enkele manier om dat id te ontdekken. Aan de suppliers-kant bestaat
+> `/clock-supply-lines/sync/{sequenceNumber}` wél, met bovendien meer velden (`batchId`,
+> `isDeleted`, `salesStrategyId`).
+>
+> **1.2a** Is er een route die wij over het hoofd zien, of is dit inderdaad niet beschikbaar
+> voor kopers? Als het laatste: staat het op de roadmap, en zou een omgekeerde verwijzing
+> (een `clockSupplyReference` op de voorverkoopregel) een lichtere tussenoplossing zijn?
 
 **1.3** De documentatie beschrijft het endpoint als *"clock presales supply lines from all
 the suppliers in your network"*. Wij hebben **nul connecties** staan en krijgen toch
 **2.410 verschillende kwekers** en alle zes veillocaties binnen. Wat betekent "network"
 hier precies? En vooral: geldt dat op productie ook, of gaat daar wél een netwerkfilter
 gelden waardoor ons beeld ineens veel smaller wordt?
+
+> **Beantwoord op 4 augustus 2026, uit jullie eigen documentatie.** De pagina over clock
+> pre sales supply stelt: *"Supply is available for all auction sales channel customers.
+> (not customer specific)"*. En de swagger bevestigt het door het contrast: bij
+> `/supply-lines/sync/` staat expliciet *"The results are filtered based on your connected
+> suppliers"*, bij `/auction/clock-presales-supply/sync/` staat die zin **niet**.
+>
+> Wij gaan er dus van uit dat ons beeld op productie niet smaller wordt. Graag alleen nog
+> een bevestiging dat die "in your network"-formulering achterhaald is en niet iets is dat
+> later alsnog gaat gelden.
 
 **1.4** Is er een route — via de API of anderszins — die het volledige klokaanbod ontsluit
 zoals de gestopte e-mailservice dat deed? En hoe verhoudt de VMP-koppeling voor
@@ -127,6 +171,27 @@ op productie, en zo ja hoe vaak?
 **2.5** Wat gebeurt er met een regel na sluiting van het ordervenster? Gaat de status naar
 `UNAVAILABLE`, en is het onverkochte deel dat doorschuift naar de klok ergens via de API
 zichtbaar?
+
+> **Beantwoord op 4 augustus 2026, uit jullie documentatie.** Er staat: *"After the
+> expiration of the clock pre sales order window, non sold clock pre sales supply will be
+> allocated as clock sales supply"*, en *"allocated clock pre sales supply is not allocated
+> for clock sales supply"*.
+>
+> Dat verklaart precies het tweedelige patroon dat wij in de 231 mutaties zagen:
+>
+> | Wat wij zagen | Wat het betekent |
+> |---|---|
+> | 84 regels naar **0 stuks** | in de voorverkoop verkocht; gaat niet naar de klok |
+> | 145 regels **UNAVAILABLE met het aantal onaangeroerd** | niet verkocht; wordt klok-supply |
+>
+> Onze aanname in 2.1 klopte dus maar half: het aantal is de plek waar verkoop zichtbaar
+> wordt, maar de *meeste* regels verlaten de voorverkoop juist **zonder** verkoop, en dat
+> zijn precies de regels die op de klok komen.
+>
+> Daarmee wordt 1.2 des te belangrijker: wij zien nu wel dát er 145 partijen naar de klok
+> doorschuiven, maar niet wat daar mee gebeurt — `auctionStatus` kent twaalf waarden
+> (`QUEUED_FOR_AUCTION`, `IN_AUCTION`, `AUCTION_COMPLETED`, `NOT_AUCTIONED`,
+> `RETOUR_SUPPLIER`, ...) en die zijn voor ons allemaal onbereikbaar.
 
 **2.6** Bij het bekijken van de 231 mutaties uit 2.2 viel iets op: **vrijwel geen enkele
 gemuteerde regel had een afleverbon.**
