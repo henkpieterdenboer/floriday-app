@@ -1,17 +1,58 @@
+# Mail aan Arjan — voorstel, ter vergelijking
+
+*Herschreven op 5 augustus 2026. Zelfde boodschap als het origineel hieronder, met drie
+aanpassingen: de tijdshorizon staat er nu in, de dekkingsvraag is scherper gesteld zodat er
+meer uit komt dan "ja klopt", en productietoegang is een concrete vraag met een aanleiding
+vóór de vakantie in plaats van een suggestie. De originele versie staat er ongewijzigd onder.*
+
+---
+
+Beste Arjan,
+
+Zoals per Teams al even getikt: hierbij een paar vragen. Passen wellicht ook in het
+Slack-kanaal, maar die uitnodiging hebben we volgens mij nog niet binnen.
+
+We bouwen een intern schermpje waarop onze inkopers het klokaanbod van morgen en overmorgen
+kunnen doorzoeken. Meer dan ophalen en tonen doen we er niet mee. Daar lopen we tegen drie
+dingen aan:
+
+1. **Zien we alles?** Het endpoint heet clock-presales-supply, en als ik het goed begrijp
+   gaat onverkochte voorverkoop door naar de klok. Maar komt élke klokpartij eerst door de
+   voorverkoop, of gaat een deel er rechtstreeks naartoe? Anders gezegd: als ik dit scherm
+   "het klokaanbod van morgen" noem, klopt dat dan?
+
+2. **Wat betekent `numberOfPieces` precies?** Is dat het oorspronkelijk aangeboden aantal,
+   of wat er op dat moment nog te koop is? Voor onze inkopers maakt dat nogal uit — die
+   willen weten wat er nog ligt.
+
+3. **En `UNAVAILABLE`?** Wij nemen aan: niet meer beschikbaar voor voorverkoop, gaat door
+   naar de klok. Klopt die lezing?
+
+Dan het praktische punt. We zitten nu op staging, en daar is het lastig valideren — ik kan
+de cijfers niet naast de live Floriday-pagina leggen, en een deel van wat er staat is
+duidelijk testdata. Aangezien we niet veel spannenders doen dan aanbod ophalen en tonen:
+**wat is er nodig om naar productie te gaan, en hoe lang duurt zo'n aanvraag?** Als we dat
+vóór je vakantie in gang kunnen zetten scheelt ons dat weken wachten.
+
+Zullen we morgen even bellen? Dan tikken we bovenstaande in tien minuten door.
+
+groet,
+Henk Pieter
+
+---
+---
+
 # Mail aan Arjan, door Henk Pieter
 
 Beste Arjan,
 
 Zoals ook per Teams al even getikt, bijgaand alvast een mail met een paar vragen. Wellicht dat deze ook goed in het Slack kanaal passen, maar daarvoor hebben we de uitnodiging volgens mij nog niet binnen? Daarom ook alvast zo even.
 
-1. Grootste vraag zit eigenlijk rond wat de API serveert. De API is 'clock-presales-supply', maar is het ook alleen maar presales? Ik kreeg eerder de indruk van je (en ook als ik de documentatie lees) dat het juist ook het daadwerkelijke klokaanbod zou moeten zijn, maar uitsluitsel daarover is wel van belang
+1. Grootste vraag zit eigenlijk rond wat de API serveert. De API is 'clock-presales-supply', maar is het ook alleen maar presales? Als ik het goed begreep is dit al het aanbod en neemt het nummer wat af door KVV, maar gaat het restant door naar de klok. Wel fijn om even je bevestiging te hebben daar. 
 2. In de data vinden we 'numberOfPieces'. Daalt dat nummer als er klokvoorverkoop plaatsvindt? Of is dit het origineel aangeboden aantal? Is er dan op een andere manier uit de API te halen welke pieces in de voorverkoop inmiddels verkocht zijn?
-3. We zien een status 'UNAVAILABLE' en nemen daarbij even aan dat een item dan niet meer available is voor voorverkoop en naar de klok gaat? 
-Bovenstaande vragen richten zich eigenlijk allemaal op de vraag hoe een aangemelde partij zich door KVV naar de klok beweegt en wat de data betekent die de API weergeeft.
+3. We zien een status 'UNAVAILABLE' en nemen daarbij even aan dat een item dan niet meer available is voor voorverkoop en naar de klok gaat? Als bij een volgende sync het numberOfPieces naar 0 gedaald is, betekent dat dan dat alles in KVV verkocht is?
 
-
-
-Daarbij: omdat het stage-data is, is het ook moeilijk met de live floriday pagina te valideren. Wellicht is het een idee om voor deze applicatie binnen afzienbare tijd door te stappen naar de productie-omgeving; dan kunnen we dit soort zaken ook zelf valideren. 
+Bovenstaande vragen richten zich eigenlijk allemaal op de vraag hoe een aangemelde partij zich door KVV naar de klok beweegt en wat de data betekent die de API weergeeft. Omdat het stage-data is, is het ook moeilijk met de live floriday pagina te valideren. Aangezien we niet veel meer spannends doen dan aanbod ophalen is het wellicht een idee om voor deze applicatie binnen afzienbare tijd door te stappen naar de productie-omgeving; dan kunnen we dit soort zaken ook zelf valideren met de online omgeving. 
 
 Goed om elkaar nog even te spreken voor je vakantie denk ik? Ik zal het morgen iig nog even proberen.
 
