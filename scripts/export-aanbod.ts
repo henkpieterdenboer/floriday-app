@@ -122,6 +122,33 @@ interface Artikel {
   gtin: string | null;
   botanicalNames: string[];
   countryOfOriginIsoCodes: string[];
+  characteristics: unknown;
+}
+
+interface Kenmerk {
+  vbnCode: string;
+  vbnValueCode: string;
+}
+
+/**
+ * De kenmerken van een artikel zijn een lijst VBN-code/waarde-paren; er is geen veld dat
+ * "lengte" heet. Welke code welke betekenis heeft staat nergens in de API.
+ *
+ * S20 is de lengte in centimeters. Vastgesteld door de kenmerken te vergelijken met
+ * artikelnamen die hun maat zelf noemen ("Roos GrandPrix 50cm"): van 129 zulke artikelen
+ * kwam S20 er 124 keer exact mee overeen, oftewel 96%. De eerstvolgende kandidaat kwam niet
+ * verder dan 49%. Over het hele archief zijn 80, 70, 60 en 50 cm de meest voorkomende
+ * waarden, wat past bij hoe snijbloemen worden verhandeld.
+ *
+ * S98 is de kwaliteitsklasse: alleen A1, A2, B1 en NV komen voor.
+ */
+function kenmerken(artikel: Artikel | undefined): Kenmerk[] {
+  const rauw = artikel?.characteristics;
+  return Array.isArray(rauw) ? (rauw as Kenmerk[]) : [];
+}
+
+function kenmerk(artikel: Artikel | undefined, code: string): string | null {
+  return kenmerken(artikel).find((k) => k.vbnCode === code)?.vbnValueCode ?? null;
 }
 
 /** Lege string en null betekenen bij Floriday allebei "niet ingevuld"; zo tonen we dat ook. */
@@ -180,6 +207,26 @@ const KOLOMMEN: Kolom[] = [
     bron: "opgezocht",
     toelichting: "TradeItem.name bij tradeItemId. Leeg als dat artikel nog niet is opgehaald.",
     waarde: (r, x) => leeg(x.artikelen.get(r.tradeItemId)?.name),
+  },
+  {
+    kop: "Lengte (cm)",
+    breedte: 12,
+    bron: "opgezocht",
+    toelichting:
+      "TradeItem.characteristics, VBN-code S20. Er is geen veld dat lengte heet; deze code is " +
+      "afgeleid uit de data - zie het blad Kenmerken. Leeg bij producten zonder lengte, zoals " +
+      "potplanten.",
+    waarde: (r, x) => {
+      const waarde = kenmerk(x.artikelen.get(r.tradeItemId), "S20");
+      return waarde === null ? null : Number(waarde);
+    },
+  },
+  {
+    kop: "Kwaliteit",
+    breedte: 11,
+    bron: "opgezocht",
+    toelichting: "TradeItem.characteristics, VBN-code S98. Komt voor als A1, A2, B1 en NV.",
+    waarde: (r, x) => kenmerk(x.artikelen.get(r.tradeItemId), "S98"),
   },
   {
     kop: "Veilingdatum",
@@ -424,6 +471,18 @@ const KOLOMMEN: Kolom[] = [
     waarde: (r, x) => x.artikelen.get(r.tradeItemId)?.countryOfOriginIsoCodes.join(", ") || null,
   },
   {
+    kop: "Alle kenmerken",
+    breedte: 52,
+    bron: "opgezocht",
+    toelichting:
+      "TradeItem.characteristics volledig, als code=waarde. Staat er zodat geen enkel kenmerk " +
+      "verloren gaat, ook die waarvan de betekenis nog onbekend is. Het blad Kenmerken telt ze.",
+    waarde: (r, x) =>
+      kenmerken(x.artikelen.get(r.tradeItemId))
+        .map((k) => `${k.vbnCode}=${k.vbnValueCode}`)
+        .join(" ") || null,
+  },
+  {
     kop: "Voor het eerst gezien",
     breedte: 22,
     bron: "afgeleid",
@@ -544,7 +603,7 @@ async function haalContext(regels: ExportRij[]): Promise<ExtraContext> {
       where: { tradeItemId: { in: artikelIds } },
       select: {
         tradeItemId: true, name: true, vbnProductCode: true, code: true, gtin: true,
-        botanicalNames: true, countryOfOriginIsoCodes: true,
+        botanicalNames: true, countryOfOriginIsoCodes: true, characteristics: true,
       },
     }),
     // Geteld over het hele archief, niet over deze export: de vraag is hoe groot een partij
@@ -682,6 +741,76 @@ function bouwVeldenblad(
   blad.getColumn("uniek").numFmt = "#,##0";
 }
 
+interface KenmerkStatistiek {
+  code: string;
+  regels: number;
+  unieke: number;
+  waarden: string;
+}
+
+/**
+ * Alle VBN-kenmerkcodes die in het archief voorkomen, geteld over aanbodregels in plaats van
+ * over artikelen: een code die op duizend artikelen zit die nooit worden aangeboden is minder
+ * interessant dan een code op honderd artikelen die dagelijks langskomen.
+ */
+async function haalKenmerkStatistiek(): Promise<KenmerkStatistiek[]> {
+  return prisma.$queryRaw<KenmerkStatistiek[]>`
+    SELECT
+      c->>'vbnCode' AS code,
+      count(*)::int AS regels,
+      count(DISTINCT c->>'vbnValueCode')::int AS unieke,
+      string_agg(DISTINCT c->>'vbnValueCode', ', ' ORDER BY c->>'vbnValueCode') AS waarden
+    FROM "SupplyLine" sl
+    JOIN "TradeItem" t ON t."tradeItemId" = sl."tradeItemId",
+         jsonb_array_elements(t.characteristics::jsonb) AS c
+    GROUP BY 1
+    ORDER BY 2 DESC
+  `;
+}
+
+const BEKENDE_CODES: Record<string, string> = {
+  S20: "Lengte in cm. Afgeleid uit de data: van 129 artikelen met een cm-maat in hun naam kwam " +
+    "S20 er 124 mee overeen (96%). Meest voorkomend: 80, 70, 60 en 50 cm.",
+  S98: "Kwaliteitsklasse. Alleen A1, A2, B1 en NV komen voor.",
+  S62: "Land van herkomst, als ISO-landcode.",
+};
+
+function bouwKenmerkenblad(boek: ExcelJS.Workbook, statistiek: KenmerkStatistiek[]): void {
+  const blad = boek.addWorksheet("Kenmerken", { views: [{ state: "frozen", ySplit: 3 }] });
+  blad.columns = [
+    { header: "", width: 9 },
+    { header: "", width: 13 },
+    { header: "", width: 10 },
+    { header: "", width: 46 },
+    { header: "", width: 60 },
+  ];
+
+  const kop = blad.addRow([
+    "Kenmerken van artikelen: VBN-code en waarde. De API levert geen namen bij deze codes.",
+  ]);
+  kop.font = { bold: true };
+  blad.addRow([]);
+
+  const rubriek = blad.addRow(["Code", "Aanbodregels", "Waarden", "Betekenis", "Waarden die voorkomen"]);
+  rubriek.font = { bold: true };
+
+  const totaal = statistiek.reduce((max, s) => Math.max(max, s.regels), 0);
+  for (const s of statistiek) {
+    const rij = blad.addRow([
+      s.code,
+      s.regels,
+      s.unieke,
+      BEKENDE_CODES[s.code] ?? "",
+      s.waarden.length > 300 ? s.waarden.slice(0, 300) + " ..." : s.waarden,
+    ]);
+    rij.getCell(4).alignment = { wrapText: true, vertical: "top" };
+    rij.getCell(5).alignment = { wrapText: true, vertical: "top" };
+    if (BEKENDE_CODES[s.code]) rij.getCell(1).font = { bold: true };
+    if (s.regels === totaal) rij.getCell(2).font = { bold: true };
+  }
+  blad.getColumn(2).numFmt = "#,##0";
+}
+
 function bouwToelichtingblad(
   boek: ExcelJS.Workbook,
   info: { selectie: string; rijen: number; maxGroep: number; database: string; bevindingen: string[] },
@@ -763,8 +892,8 @@ async function main(): Promise<void> {
   const zonderKweker = regels.filter((r) => !extra.kwekers.has(r.supplierOrganizationId)).length;
   const zonderArtikel = regels.filter((r) => !extra.artikelen.has(r.tradeItemId)).length;
 
-  console.log("Vulgraad per veld meten over het hele archief...");
-  const vulgraad = await haalVulgraad();
+  console.log("Vulgraad en kenmerken meten over het hele archief...");
+  const [vulgraad, kenmerkStatistiek] = await Promise.all([haalVulgraad(), haalKenmerkStatistiek()]);
 
   const [tellingen] = await prisma.$queryRaw<
     { regels: bigint; versies: bigint; gewijzigd: bigint; bonnen: bigint; bonMeerKwekers: bigint }[]
@@ -802,6 +931,13 @@ async function main(): Promise<void> {
       `hetzelfde bonnummer zijn dus meestal onafhankelijk van elkaar.`,
     `Een verse pagina van duizend opeenvolgende records uit de API bevatte duizend verschillende ` +
       `aanbodregels, zonder enige herhaling - de synchronisatiestroom levert geen mutatiegeschiedenis.`,
+    `Productlengte zit niet in de aanbodregel maar in de kenmerken van het artikel, als VBN-code ` +
+      `S20. De API levert geen namen bij die codes; dat S20 de lengte in centimeters is, is ` +
+      `afgeleid door de codes te vergelijken met artikelnamen die hun maat zelf noemen - 124 van ` +
+      `129 kwamen exact overeen. Meest voorkomend zijn 80, 70, 60 en 50 cm. Van alle aanbodregels ` +
+      `heeft 57,3% een lengte; de rest zijn producten waarvoor lengte niet geldt, zoals potplanten. ` +
+      `Het blad Kenmerken toont alle codes die voorkomen, ook die waarvan wij de betekenis niet ` +
+      `kennen - een goede lijst om bij Floriday langs te lopen.`,
   ];
   if (zonderKweker > 0) {
     bevindingen.push(`${zonderKweker} van de ${regels.length} regels verwijzen naar een kweker die ` +
@@ -818,6 +954,7 @@ async function main(): Promise<void> {
 
   bouwAanbodblad(boek, regels, extra);
   bouwVeldenblad(boek, vulgraad);
+  bouwKenmerkenblad(boek, kenmerkStatistiek);
   const selectieTekst = {
     reeksen: `reeksen (dezelfde kweker + hetzelfde artikel, 2 t/m ${maxGroep} regels, langste eerst, ` +
       `op veilingdatum)`,
@@ -849,7 +986,8 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`Geschreven: ${doel}`);
   console.log(`  ${regels.length} regels over ${partijen} afleverbonnen`);
-  console.log(`  ${KOLOMMEN.length} kolommen, drie tabbladen (Aanbod, Velden, Toelichting)`);
+  console.log(`  ${KOLOMMEN.length} kolommen over ${boek.worksheets.length} tabbladen: ` +
+    boek.worksheets.map((w) => w.name).join(", "));
 
   await prisma.$disconnect();
 }
