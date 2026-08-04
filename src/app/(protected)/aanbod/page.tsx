@@ -47,6 +47,11 @@ export default async function AanbodPage({ searchParams }: AanbodPageProps) {
   const params = toURLSearchParams(raw);
   const now = new Date();
 
+  // ?eenvoudig=1 laat het scherm alleen de gekozen periode zien, zonder de andere presets
+  // en zonder de ondertitel. Puur weergave: dezelfde url zonder deze parameter geeft exact
+  // dezelfde resultaten, met alles erbij. Bedoeld voor schermafdrukken.
+  const eenvoudig = raw.eenvoudig === "1";
+
   const filters = parseFilters(params, now);
   const view = parseView(params);
 
@@ -59,14 +64,18 @@ export default async function AanbodPage({ searchParams }: AanbodPageProps) {
     <div className="flex flex-col gap-4 p-6">
       <div>
         <h1 className="text-xl font-semibold">Aanbod</h1>
-        <p className="text-sm text-muted-foreground">
-          Doorzoek het gearchiveerde klokvoorverkoop-aanbod.
-        </p>
+        {/* Weggelaten in de eenvoudige weergave: "gearchiveerde" zegt meer over wat dit
+            scherm achter zich heeft staan dan op een schermafdruk hoeft te staan. */}
+        {eenvoudig ? null : (
+          <p className="text-sm text-muted-foreground">
+            Doorzoek het gearchiveerde klokvoorverkoop-aanbod.
+          </p>
+        )}
       </div>
 
       <Freshness />
 
-      <FilterBar filters={filters} view={view} now={now.toISOString()} />
+      <FilterBar filters={filters} view={view} now={now.toISOString()} alleenActievePeriode={eenvoudig} />
 
       <ViewToggle filters={filters} view={view} />
 

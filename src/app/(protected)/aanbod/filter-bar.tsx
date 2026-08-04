@@ -53,7 +53,24 @@ function Chip({ href, active, children }: { href: string; active: boolean; child
  * that calls setState to resync - see the project's React 19 rule against setState directly
  * in an effect body.
  */
-export function FilterBar({ filters, view, now }: { filters: SearchFilters; view: ViewState; now: string }) {
+export function FilterBar({
+  filters,
+  view,
+  now,
+  alleenActievePeriode = false,
+}: {
+  filters: SearchFilters;
+  view: ViewState;
+  now: string;
+  /**
+   * Toont alleen de actieve periodeknop en verbergt de andere presets plus "Zelf kiezen".
+   * Aangezet met ?eenvoudig=1 in de URL, bedoeld voor een schermafdruk waarop de app niet
+   * meer moet laten zien dan het onderwerp van dat moment. Verandert niets aan de
+   * filtering zelf: dezelfde URL zonder de parameter geeft hetzelfde resultaat met alle
+   * knoppen erbij.
+   */
+  alleenActievePeriode?: boolean;
+}) {
   const router = useRouter();
   const nowDate = new Date(now);
 
@@ -93,7 +110,7 @@ export function FilterBar({ filters, view, now }: { filters: SearchFilters; view
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
       <div className="flex flex-wrap gap-2" role="group" aria-label="Periode">
-        {PRESETS.map((preset) => {
+        {PRESETS.filter((preset) => !alleenActievePeriode || filters.preset === preset.id).map((preset) => {
           const range = resolvePreset(preset.id, nowDate);
           const active = filters.preset === preset.id;
           return (
@@ -121,8 +138,10 @@ export function FilterBar({ filters, view, now }: { filters: SearchFilters; view
           type="button"
           onClick={() => setCustomOpen((open) => !open)}
           aria-pressed={filters.preset === "aangepast"}
+          hidden={alleenActievePeriode && filters.preset !== "aangepast"}
           className={cn(
             "flex flex-col items-start rounded-lg border px-2.5 py-1.5 text-left text-sm transition-colors",
+            alleenActievePeriode && filters.preset !== "aangepast" && "hidden",
             filters.preset === "aangepast"
               ? "border-transparent bg-primary text-primary-foreground"
               : "border-input bg-background hover:bg-muted",
