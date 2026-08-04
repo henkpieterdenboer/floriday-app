@@ -312,6 +312,35 @@ niet-numerieke waarden in staan, of is het altijd een getal in een string?
 **5.7** Wij zien 419 aanbodregels met een prijs van **0,00** en een hoogste prijs van
 **9999,00**. Zijn dat reële waarden of placeholders?
 
+**5.8** **Hetzelfde afleverbonnummer komt voor bij verschillende kwekers.** Van de 286.390
+bonnummers in ons archief worden er **30.964 (11%) door meer dan één kweker gebruikt**,
+oplopend tot acht kwekers op één nummer.
+
+Een concreet voorbeeld, bon `65902A`:
+
+| Veildatum | Status | Kweker | Artikel |
+|---|---|---|---|
+| 02-08-2024 | UNAVAILABLE | Satter Phalaenopsis BV | Rio Grande Phalaenopsis 12cm |
+| 03-08-2026 | AVAILABLE | Fa G.C. Kuipers | Purple Phalaenopsis (DND) |
+
+Het patroon wijst op **hergebruik na verloop van tijd**, niet op gelijktijdige botsingen:
+de mediane afstand tussen eerste en laatste gebruik van zo'n nummer is **273 dagen** (max
+796), en slechts **215** van de 30.964 gevallen vallen op dezelfde veildag. Dat oogt als een
+nummerreeks die periodiek opnieuw begint.
+
+**5.8a** Is een afleverbonnummer bedoeld uniek te zijn, en zo ja binnen welke scope — per
+kweker, per veildag, per jaar? Wij gebruiken `supplyLineId` als sleutel, dus voor onze
+opslag is dit geen probleem. Maar zodra een inkoper "laat mij die partij zien" vraagt, is
+het bonnummer wat hij noemt, en dan moeten wij weten wat het identificeert.
+
+**5.8b** Wij zien twee vormen naast elkaar: **227.008 regels met een nummer dat met cijfers
+begint** (`65902A`, `51203A`) en **252.804 met een letter** (`F2DDPWA`, `FDRW17A`). Zijn dat
+twee verschillende systemen of bronnen, en betekent de letter achteraan iets vasts (wij
+zien A, B, C oplopen binnen dezelfde code)?
+
+**5.8c** Zien wij dit hergebruik alleen doordat staging al twee jaar meeloopt zonder
+opschoning, of gebeurt het op productie net zo goed?
+
 ---
 
 ## 6. Techniek en operationeel
