@@ -18,6 +18,14 @@ export interface Configuratie {
   omgeving: string;
   /** Staging of productie, afgeleid uit de api-url. */
   floridayOmgeving: "staging" | "productie" | "onbekend";
+  /**
+   * Of er echt verstuurd wordt. Alle vier de SMTP-velden moeten gevuld zijn; ontbreekt er
+   * één, dan valt mail.ts terug op Ethereal en komt er niets aan bij een uitgenodigde
+   * collega. Die terugval is stil, en dat is precies waarom hij hier zichtbaar hoort.
+   */
+  mailViaResend: boolean;
+  /** Namen van de SMTP-instellingen die leeg zijn. */
+  ontbrekendeMail: string[];
 }
 
 const FLORIDAY_VELDEN = [
@@ -27,6 +35,10 @@ const FLORIDAY_VELDEN = [
   "FLORIDAY_CUSTOMERS_CLIENT_SECRET",
   "FLORIDAY_CUSTOMERS_API_KEY",
 ] as const;
+
+/** Dezelfde vier die sendMail controleert. MAIL_FROM hoort er bewust niet bij: zonder dat
+ *  veld valt mail.ts terug op een standaardafzender, maar hij verstuurt wel. */
+const SMTP_VELDEN = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD"] as const;
 
 export function leesConfiguratie(): Configuratie {
   const env = getEnv();
@@ -40,10 +52,19 @@ export function leesConfiguratie(): Configuratie {
 
   const url = env.FLORIDAY_CUSTOMERS_API_BASE_URL ?? "";
 
+  // Exact dezelfde vier velden waar sendMail op beslist; die twee mogen niet uit elkaar
+  // lopen, anders meldt dit scherm iets anders dan er gebeurt.
+  const ontbrekendeMail = SMTP_VELDEN.filter((naam) => {
+    const waarde = process.env[naam];
+    return waarde === undefined || waarde.trim() === "";
+  });
+
   return {
     synchronisatieAan: isSyncEnabled(),
     ontbrekend: [...ontbrekend],
     omgeving: process.env.VERCEL_ENV ?? (process.env.VERCEL ? "vercel" : "lokaal"),
     floridayOmgeving: url === "" ? "onbekend" : url.includes("staging") ? "staging" : "productie",
+    mailViaResend: ontbrekendeMail.length === 0,
+    ontbrekendeMail: [...ontbrekendeMail],
   };
 }

@@ -231,6 +231,15 @@ export default async function StatusPage() {
             onder="afgeleid uit de api-url"
           />
           <Kerncijfer label="Draait op" waarde={config.omgeving} />
+          <Kerncijfer
+            label="E-mail"
+            waarde={config.mailViaResend ? "Resend" : "Ethereal"}
+            onder={
+              config.mailViaResend
+                ? "wordt echt verstuurd"
+                : `komt niet aan — ${config.ontbrekendeMail.join(", ")} leeg`
+            }
+          />
         </CardContent>
       </Card>
 
