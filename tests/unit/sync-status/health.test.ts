@@ -64,6 +64,47 @@ describe("beoordeelSync", () => {
     expect(uitkomst.kop).toMatch(/mislukt/i);
   });
 
+  // Het geval dat dit blootlegde: interval op een uur, laatste run 27 minuten geleden, en
+  // het scherm meldde "loopt achter" terwijl de volgende run simpelweg nog niet aan de beurt
+  // was. De drempels bewegen daarom mee met het ingestelde interval.
+  describe("de drempels bewegen mee met het interval", () => {
+    it("is groen bij een uur interval en een halfuur stilte", () => {
+      const uitkomst = beoordeelSync(
+        invoer({ intervalMinuten: 60, laatsteGeslaagdeRun: new Date("2026-08-05T11:30:00Z") }),
+      );
+      expect(uitkomst.kleur).toBe("groen");
+    });
+
+    it("is oranje bij een uur interval en twee uur stilte", () => {
+      const uitkomst = beoordeelSync(
+        invoer({ intervalMinuten: 60, laatsteGeslaagdeRun: new Date("2026-08-05T09:45:00Z") }),
+      );
+      expect(uitkomst.kleur).toBe("oranje");
+      expect(uitkomst.toelichting).toMatch(/elk uur/);
+    });
+
+    it("is rood bij een uur interval pas na vier gemiste slagen", () => {
+      const naDrieUur = beoordeelSync(
+        invoer({ intervalMinuten: 60, laatsteGeslaagdeRun: new Date("2026-08-05T09:00:00Z") }),
+      );
+      expect(naDrieUur.kleur).toBe("oranje");
+
+      const naVijfUur = beoordeelSync(
+        invoer({ intervalMinuten: 60, laatsteGeslaagdeRun: new Date("2026-08-05T07:00:00Z") }),
+      );
+      expect(naVijfUur.kleur).toBe("rood");
+    });
+
+    // De ondergrens blijft staan: twee minuten stilte bij een interval van een minuut is
+    // geen storing, want een run duurt zelf soms langer dan dat.
+    it("wordt niet strenger dan twintig minuten bij een kort interval", () => {
+      const uitkomst = beoordeelSync(
+        invoer({ intervalMinuten: 1, laatsteGeslaagdeRun: new Date("2026-08-05T11:45:00Z") }),
+      );
+      expect(uitkomst.kleur).toBe("groen");
+    });
+  });
+
   it("is oranje wanneer de laatste run langer dan twintig minuten geleden is", () => {
     const uitkomst = beoordeelSync(
       invoer({ laatsteGeslaagdeRun: new Date("2026-08-05T11:35:00Z") }),

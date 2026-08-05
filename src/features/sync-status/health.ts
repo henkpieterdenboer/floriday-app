@@ -42,17 +42,30 @@ export interface GezondheidInvoer {
 }
 
 /**
- * Hoe lang na de laatste geslaagde synchronisatie het nog groen is.
+ * Ondergrens voor hoe lang het na een geslaagde run nog groen blijft.
  *
- * Bewust een vaste grens en niet een veelvoud van het ingestelde interval: bij een interval
- * van een minuut zou dat na twee minuten al alarm slaan, en dat is geen storing maar een
- * trage cyclus. Twintig minuten is ruim genoeg om een hapering te laten passeren en kort
- * genoeg om een stilgevallen synchronisatie binnen het halfuur te zien.
+ * Een vaste grens alleen zou niet werken: bij een interval van een uur is twintig minuten
+ * stilte volkomen normaal - de volgende run is dan simpelweg nog niet aan de beurt. Maar
+ * meebewegen met het interval alleen ook niet: bij een interval van een minuut zou twee
+ * minuten stilte al alarm geven, terwijl een run zelf soms langer dan een minuut duurt.
+ *
+ * Vandaar allebei: nooit strenger dan deze ondergrens, en bij langere intervallen twee
+ * volle slagen.
  */
 export const GROEN_TOT_MINUTEN = 20;
 
 /** Daarboven is het niet meer "loopt even achter" maar "er is iets mis". */
 export const ROOD_VANAF_UREN = 3;
+
+/** Groen tot twee gemiste slagen, met de vaste ondergrens eronder. */
+export function groenTotMinuten(intervalMinuten: number): number {
+  return Math.max(GROEN_TOT_MINUTEN, intervalMinuten * 2);
+}
+
+/** Rood vanaf vier gemiste slagen, met drie uur als ondergrens. */
+export function roodVanafMinuten(intervalMinuten: number): number {
+  return Math.max(ROOD_VANAF_UREN * 60, intervalMinuten * 4);
+}
 
 function minutenGeleden(vanaf: Date, nu: Date): number {
   return (nu.getTime() - vanaf.getTime()) / 60_000;
@@ -119,7 +132,7 @@ export function beoordeelSync(invoer: GezondheidInvoer): SyncGezondheid {
     };
   }
 
-  if (minuten > ROOD_VANAF_UREN * 60) {
+  if (minuten > roodVanafMinuten(intervalMinuten)) {
     return {
       kleur: "rood",
       kop: "Synchronisatie ligt stil",
@@ -129,7 +142,7 @@ export function beoordeelSync(invoer: GezondheidInvoer): SyncGezondheid {
     };
   }
 
-  if (minuten > GROEN_TOT_MINUTEN) {
+  if (minuten > groenTotMinuten(intervalMinuten)) {
     return {
       kleur: "oranje",
       kop: "Synchronisatie loopt achter",
