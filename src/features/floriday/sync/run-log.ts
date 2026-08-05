@@ -47,3 +47,33 @@ export async function finishRun(runId: bigint, outcome: RunOutcome): Promise<voi
     },
   });
 }
+
+/**
+ * Hoe lang een lopende run als lopend telt.
+ *
+ * De cron-route staat op maxDuration 300 seconden. Wordt een functie daarboven afgekapt,
+ * dan komt finishRun nooit aan de beurt en blijft de run voor altijd op RUNNING staan. Die
+ * zou dan elke volgende run tegenhouden - erger dan het probleem dat we oplossen. Na deze
+ * grens beschouwen we hem als vastgelopen en mag er weer een beginnen.
+ */
+export const RUN_VASTGELOPEN_NA_MINUTEN = 10;
+
+/**
+ * Of er op dit moment al een synchronisatie loopt voor deze bron.
+ *
+ * Bestaat omdat de geplande taak elke minuut langskomt terwijl een run minuten kan duren.
+ * Zonder deze controle stapelen ze op: op 5 augustus 2026 startte de eerste vulling op
+ * productie en stonden er binnen drie minuten drie runs tegelijk open. Rijen raken daar niet
+ * van in de war - de upserts zijn idempotent - maar de cursor kan achteruit springen en
+ * gelijktijdige transacties lopen tegen elkaars sloten aan.
+ */
+export async function isErEenRunBezig(resource: string, nu: Date = new Date()): Promise<boolean> {
+  const grens = new Date(nu.getTime() - RUN_VASTGELOPEN_NA_MINUTEN * 60_000);
+
+  const lopende = await prisma.syncRun.findFirst({
+    where: { resource, status: "RUNNING", startedAt: { gte: grens } },
+    select: { id: true },
+  });
+
+  return lopende !== null;
+}

@@ -5,6 +5,8 @@ import { SYNC_DISABLED_MESSAGE, isSyncEnabled } from "@/features/floriday/sync-e
 import { magNuSynchroniseren } from "@/features/sync-status/interval";
 import { leesInterval } from "@/features/sync-status/interval-store";
 import { getLastSuccessfulSyncAt } from "@/features/supply-search/freshness";
+import { isErEenRunBezig } from "@/features/floriday/sync/run-log";
+import { SUPPLY_RESOURCE } from "@/features/floriday/sync/cursor";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -41,6 +43,16 @@ export async function GET(request: Request): Promise<NextResponse> {
     // is de frequentie te sturen vanaf de statuspagina zonder opnieuw te deployen, en start
     // een cyclus pas als de vorige lang genoeg geleden klaar was - wat ook is wat Floriday
     // adviseert boven pieken op een vaste kloktijd.
+    // Eerst: draait er al een? De taak komt elke minuut langs terwijl een run minuten kan
+    // duren, dus zonder deze controle stapelen ze op. Vóór de intervalcontrole, want een
+    // lopende run is een hardere reden om over te slaan dan een te kort interval.
+    if (await isErEenRunBezig(SUPPLY_RESOURCE)) {
+      return NextResponse.json({
+        skipped: true,
+        reason: "Er loopt al een synchronisatie voor deze bron.",
+      });
+    }
+
     const interval = await leesInterval();
     const laatste = await getLastSuccessfulSyncAt();
     const nu = new Date();

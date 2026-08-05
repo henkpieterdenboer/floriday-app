@@ -30,3 +30,23 @@ zegt hoe het eruit hoort te zien. Beide lezen, niet één.
 shadcn-card (`gap-6`, `py-6`, `px-6`), wij op de base-nova-preset met
 `--card-spacing: --spacing(4)`. Dezelfde JSX levert daar dus 24px waar hij bij ons 16px
 levert. Zulke verschillen staan in geen enkele proptabel; die zie je alleen naast elkaar.
+
+## Een schemawijziging is pas af als beide databases hem hebben
+
+**5 augustus 2026.** Het model `AppSetting` toegevoegd, `npm run db:push` gedraaid, getest,
+gecommit en naar `main` gepusht. Productie gaf op elke pagina die de nieuwe tabel aanraakte
+een 500 — de tabel bestond daar niet.
+
+Twee dingen maakten dat makkelijk om te missen. `scripts/db-push.mjs` las alleen `.env` en
+had geen manier om een andere omgeving te kiezen, dus "de database bijwerken" voelde als één
+handeling terwijl het er twee zijn. En `prisma/applied.prisma` houdt **één** staat bij voor
+allebei: na een push naar test meldt het script voor productie "already up to date", terwijl
+daar niets is gebeurd.
+
+**Wat voortaan:** bij elke schemawijziging beide omgevingen doen in dezelfde zitting —
+`npm run db:push` en `npm run db:push -- --env .env.lokaal-productie` — en bij twijfel de
+doeldatabase zelf controleren met `to_regclass('public."NieuweTabel"')`. Het script drukt nu
+de doelhost af voordat het iets toepast, en de `--env` vlag bestaat.
+
+**Bredere regel:** een deploy naar productie die een schemawijziging bevat is pas veilig als
+de database daar al bij is. De volgorde is database eerst, dan code — niet andersom.

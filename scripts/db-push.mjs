@@ -14,13 +14,30 @@
  * To diff incrementally we need to know what is already applied. prisma/applied.prisma
  * is that record: a copy of the schema as last pushed. Do not edit it by hand.
  *
+ * BEWARE: applied.prisma records one state for both databases. Push to test and it will
+ * report "already up to date" for production, while production has not seen the change at
+ * all. Push to both in the same sitting, or check the target yourself - to_regclass on the
+ * new table is enough.
+ *
  * Usage:
- *   node scripts/db-push.mjs             apply pending changes
+ *   node scripts/db-push.mjs             apply pending changes to the test database
+ *   node scripts/db-push.mjs --env .env.lokaal-productie   ... to another environment
  *   node scripts/db-push.mjs --dry-run   print the DDL without applying it
  *   node scripts/db-push.mjs --from-empty  rebuild from nothing (destructive on drift)
+ *
+ * THERE ARE TWO DATABASES. A schema change is only done once it has been applied to both.
+ * Deploying a change to production without pushing it there gives a 500 on every page that
+ * touches the new table - which is exactly what happened when AppSetting was added, on
+ * 5 August 2026. The target host is printed before anything is applied.
+ *
+ * --env is read here by hand rather than through DOTENV_CONFIG_PATH: the installed dotenv
+ * ignores that variable, which would silently point this at the wrong database.
  */
 
-import "dotenv/config";
+import { config as loadEnv } from "dotenv";
+
+const envIndex = process.argv.indexOf("--env");
+loadEnv(envIndex === -1 ? undefined : { path: process.argv[envIndex + 1] });
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -74,6 +91,9 @@ async function main() {
 
   const connectionString = process.env.DIRECT_URL;
   if (!connectionString) throw new Error("DIRECT_URL is not set. See .env.example.");
+
+  // De host erbij, want dit is het script waar de verkeerde database het meeste kost.
+  console.log(`Target: ${new URL(connectionString).hostname}`);
 
   const pool = new Pool({ connectionString });
   try {
