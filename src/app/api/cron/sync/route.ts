@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { runSupplySync } from "@/features/floriday/sync/run-supply-sync";
 import { SYNC_DISABLED_MESSAGE, isSyncEnabled } from "@/features/floriday/sync-enabled";
+import { magNuSynchroniseren } from "@/features/sync-status/interval";
+import { leesInterval } from "@/features/sync-status/interval-store";
+import { getLastSuccessfulSyncAt } from "@/features/supply-search/freshness";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -32,6 +35,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     // omgeving die nog wacht op gegevens is niet hetzelfde als een omgeving die stuk is.
     if (!isSyncEnabled()) {
       return NextResponse.json({ skipped: true, reason: SYNC_DISABLED_MESSAGE });
+    }
+
+    // Het cronschema staat vast bij het deployen; het feitelijke ritme komt hiervandaan. Zo
+    // is de frequentie te sturen vanaf de statuspagina zonder opnieuw te deployen, en start
+    // een cyclus pas als de vorige lang genoeg geleden klaar was - wat ook is wat Floriday
+    // adviseert boven pieken op een vaste kloktijd.
+    const interval = await leesInterval();
+    const laatste = await getLastSuccessfulSyncAt();
+    const nu = new Date();
+
+    if (!magNuSynchroniseren(laatste, interval, nu)) {
+      return NextResponse.json({
+        skipped: true,
+        reason: `Vorige synchronisatie was minder dan ${interval} minuten geleden.`,
+        intervalMinuten: interval,
+      });
     }
 
     const result = await runSupplySync({ trigger: "CRON", maxPages: MAX_PAGES_PER_RUN });

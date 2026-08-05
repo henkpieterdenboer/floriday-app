@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/features/auth/auth-config";
 import { runSupplySync } from "@/features/floriday/sync/run-supply-sync";
 import { isSyncEnabled, SYNC_DISABLED_MESSAGE } from "@/features/floriday/sync-enabled";
+import {
+  beschrijfInterval,
+  isGeldigInterval,
+  MAXIMUM_INTERVAL,
+  MINIMUM_INTERVAL,
+} from "@/features/sync-status/interval";
+import { schrijfInterval } from "@/features/sync-status/interval-store";
 
 export interface VerversStand {
   status: "idle" | "klaar" | "fout" | "uit";
@@ -27,6 +34,40 @@ const MAX_PAGINAS = 20;
  * minuten ophaalt, verandert niets bij Floriday en is idempotent. Wie het scherm mag zien,
  * mag het verversen.
  */
+export interface IntervalStand {
+  status: "idle" | "klaar" | "fout";
+  bericht?: string;
+}
+
+/**
+ * Zet hoe vaak er werkelijk gesynchroniseerd wordt.
+ *
+ * Alleen voor beheerders, anders dan de verversknop: dit verandert het gedrag van de
+ * geplande taak voor iedereen en blijft staan, terwijl verversen een eenmalige actie is die
+ * niets achterlaat.
+ */
+export async function zetIntervalAction(
+  _vorige: IntervalStand,
+  formData: FormData,
+): Promise<IntervalStand> {
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") {
+    return { status: "fout", bericht: "Alleen een beheerder kan dit wijzigen." };
+  }
+
+  const minuten = Number(formData.get("minuten"));
+  if (!isGeldigInterval(minuten)) {
+    return {
+      status: "fout",
+      bericht: `Vul een heel getal van ${MINIMUM_INTERVAL} tot ${MAXIMUM_INTERVAL} minuten in.`,
+    };
+  }
+
+  await schrijfInterval(minuten);
+  revalidatePath("/status");
+  return { status: "klaar", bericht: `Opgeslagen: ${beschrijfInterval(minuten)}.` };
+}
+
 export async function ververseNuAction(): Promise<VerversStand> {
   const session = await auth();
   if (!session?.user) {

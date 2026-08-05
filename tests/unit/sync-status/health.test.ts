@@ -7,6 +7,7 @@ function invoer(overschrijf: Partial<GezondheidInvoer> = {}): GezondheidInvoer {
   return {
     synchronisatieAan: true,
     ontbrekendeInstellingen: [],
+    intervalMinuten: 5,
     laatsteGeslaagdeRun: new Date("2026-08-05T11:58:00Z"),
     laatsteStatus: "SUCCEEDED",
     waarschuwing: null,

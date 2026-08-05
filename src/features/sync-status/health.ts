@@ -5,6 +5,8 @@
  * pagina laat een kleur zien en die kleur moet kloppen ook als niemand hem naleest.
  */
 
+import { beschrijfInterval } from "@/features/sync-status/interval";
+
 export type Stoplicht = "groen" | "oranje" | "rood";
 
 export interface SyncGezondheid {
@@ -23,6 +25,8 @@ export interface GezondheidInvoer {
   synchronisatieAan: boolean;
   /** Floriday-instellingen die leeg zijn. Zonder die gegevens kan er niets opgehaald worden. */
   ontbrekendeInstellingen: string[];
+  /** Het ingestelde aantal minuten tussen twee synchronisaties, voor in de melding. */
+  intervalMinuten: number;
   /** Afronding van de laatste geslaagde run, of null als die er nooit was. */
   laatsteGeslaagdeRun: Date | null;
   /** Status van de meest recente run, ongeacht uitkomst. */
@@ -40,9 +44,10 @@ export interface GezondheidInvoer {
 /**
  * Hoe lang na de laatste geslaagde synchronisatie het nog groen is.
  *
- * De cron draait elke vijf minuten. Vier gemiste slagen is ruim genoeg om een trage run of
- * een enkele hapering niet als storing te tonen, en kort genoeg om een stilgevallen
- * synchronisatie binnen het halfuur te zien.
+ * Bewust een vaste grens en niet een veelvoud van het ingestelde interval: bij een interval
+ * van een minuut zou dat na twee minuten al alarm slaan, en dat is geen storing maar een
+ * trage cyclus. Twintig minuten is ruim genoeg om een hapering te laten passeren en kort
+ * genoeg om een stilgevallen synchronisatie binnen het halfuur te zien.
  */
 export const GROEN_TOT_MINUTEN = 20;
 
@@ -57,6 +62,7 @@ export function beoordeelSync(invoer: GezondheidInvoer): SyncGezondheid {
   const {
     synchronisatieAan,
     ontbrekendeInstellingen,
+    intervalMinuten,
     laatsteGeslaagdeRun,
     laatsteStatus,
     waarschuwing,
@@ -118,8 +124,8 @@ export function beoordeelSync(invoer: GezondheidInvoer): SyncGezondheid {
       kleur: "rood",
       kop: "Synchronisatie ligt stil",
       toelichting:
-        `De laatste geslaagde run was ${beschrijfDuur(minuten)} geleden, terwijl er elke ` +
-        "vijf minuten een hoort te draaien.",
+        `De laatste geslaagde run was ${beschrijfDuur(minuten)} geleden, terwijl er ` +
+        `${beschrijfInterval(intervalMinuten)} een hoort te draaien.`,
     };
   }
 
@@ -129,7 +135,7 @@ export function beoordeelSync(invoer: GezondheidInvoer): SyncGezondheid {
       kop: "Synchronisatie loopt achter",
       toelichting:
         `De laatste geslaagde run was ${beschrijfDuur(minuten)} geleden. ` +
-        "Er hoort er elke vijf minuten een te draaien.",
+        `Er hoort er ${beschrijfInterval(intervalMinuten)} een te draaien.`,
     };
   }
 

@@ -63,10 +63,10 @@ model SupplyLine {
   initialAuctionLocation AuctionLocation
   photoUrl               String?
 
-  firstSeenAt            DateTime        @db.Timestamptz
-  lastSeenAt             DateTime        @db.Timestamptz
+  firstSeenAt DateTime @db.Timestamptz
+  lastSeenAt  DateTime @db.Timestamptz
 
-  versions               SupplyLineVersion[]
+  versions SupplyLineVersion[]
 
   @@index([auctionDate, initialAuctionLocation])
   @@index([supplierOrganizationId])
@@ -76,10 +76,10 @@ model SupplyLine {
 }
 
 model SupplyLineVersion {
-  id                     BigInt          @id @default(autoincrement())
-  supplyLineId           String          @db.Uuid
-  sequenceNumber         BigInt
-  observedAt             DateTime        @db.Timestamptz
+  id             BigInt   @id @default(autoincrement())
+  supplyLineId   String   @db.Uuid
+  sequenceNumber BigInt
+  observedAt     DateTime @db.Timestamptz
 
   status                 SupplyStatus
   tradeItemId            String          @db.Uuid
@@ -105,7 +105,7 @@ model SupplyLineVersion {
   initialAuctionLocation AuctionLocation
   photoUrl               String?
 
-  supplyLine             SupplyLine      @relation(fields: [supplyLineId], references: [supplyLineId])
+  supplyLine SupplyLine @relation(fields: [supplyLineId], references: [supplyLineId])
 
   @@unique([supplyLineId, sequenceNumber])
   @@index([supplyLineId, observedAt])
@@ -125,11 +125,11 @@ model TradeItem {
   isDeleted               Boolean  @default(false)
   sequenceNumber          BigInt
 
-  characteristics         Json?
-  photos                  Json?
-  packingConfigurations   Json?
+  characteristics       Json?
+  photos                Json?
+  packingConfigurations Json?
 
-  fetchedAt               DateTime @db.Timestamptz
+  fetchedAt DateTime @db.Timestamptz
 
   @@index([name])
   @@index([vbnProductCode])
@@ -193,7 +193,7 @@ model User {
   lastLoginAt  DateTime? @db.Timestamptz
   createdAt    DateTime  @default(now()) @db.Timestamptz
 
-  invitations  Invitation[]
+  invitations Invitation[]
 
   @@index([email])
 }
@@ -207,7 +207,19 @@ model Invitation {
   usedAt    DateTime? @db.Timestamptz
   createdAt DateTime  @default(now()) @db.Timestamptz
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/**
+ * Instellingen die zonder nieuwe deploy aanpasbaar moeten zijn.
+ * Sleutel/waarde en geen kolom per instelling: het zijn er weinig, ze zijn zelden nodig, en
+ * elke nieuwe instelling zou anders een schemawijziging op twee databases kosten. De
+ * betekenis van een sleutel staat in de code die hem leest, niet hier.
+ */
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @db.Timestamptz
 }

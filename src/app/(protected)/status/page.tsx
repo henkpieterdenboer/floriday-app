@@ -12,6 +12,10 @@ import { formatInteger, formatPrice } from "@/features/supply-search/format";
 import { cn } from "@/lib/utils";
 import { leesConfiguratie } from "@/features/sync-status/configuratie";
 import { VerversKnop } from "./ververs-knop";
+import { IntervalKeuze } from "./interval-keuze";
+import { leesInterval } from "@/features/sync-status/interval-store";
+import { beschrijfInterval } from "@/features/sync-status/interval";
+import { auth } from "@/features/auth/auth-config";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "API-status - Floriday Middleware" };
@@ -84,6 +88,12 @@ export default async function StatusPage() {
     haalFeedBovengrens(),
   ]);
 
+  // Apart van de Promise.all hierboven: met auth() erbij verliest TypeScript het tuple-type
+  // van die array en worden alle vijf impliciet any.
+  const interval = await leesInterval();
+  const session = await auth();
+  const isAdmin = session?.user?.role === "ADMIN";
+
   const laatste = runs[0] ?? null;
   const laatsteGeslaagd = runs.find((r) => r.status === "SUCCEEDED") ?? null;
 
@@ -99,6 +109,7 @@ export default async function StatusPage() {
   const gezondheid = beoordeelSync({
     synchronisatieAan: config.synchronisatieAan,
     ontbrekendeInstellingen: config.ontbrekend,
+    intervalMinuten: interval,
     laatsteGeslaagdeRun: laatsteGeslaagd?.finishedAt ?? null,
     laatsteStatus: (laatste?.status as "SUCCEEDED" | "FAILED" | "RUNNING" | undefined) ?? null,
     waarschuwing: laatste?.warning ?? null,
@@ -193,15 +204,26 @@ export default async function StatusPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Kerncijfer
-            label="Synchronisatie"
-            waarde={config.synchronisatieAan ? "aan" : "uit"}
-            onder={
-              config.synchronisatieAan
-                ? "de geplande taak haalt op"
-                : "SYNC_ENABLED=false — de taak slaat over"
-            }
-          />
+          <div className="rounded-lg border bg-card px-4 py-3">
+            <div className="text-xs text-muted-foreground">Synchronisatie</div>
+            <div className="mt-1 font-mono text-lg leading-tight font-medium">
+              {config.synchronisatieAan ? "aan" : "uit"}
+            </div>
+            <div className="mt-1.5">
+              {isAdmin ? (
+                <IntervalKeuze huidig={interval} />
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {beschrijfInterval(interval)}
+                </span>
+              )}
+            </div>
+            {!config.synchronisatieAan ? (
+              <div className="mt-1 text-xs text-muted-foreground">
+                SYNC_ENABLED=false — de taak slaat over
+              </div>
+            ) : null}
+          </div>
           <Kerncijfer
             label="Floriday-gegevens"
             waarde={config.ontbrekend.length === 0 ? "compleet" : `${config.ontbrekend.length} ontbreekt`}
@@ -240,7 +262,10 @@ export default async function StatusPage() {
       <Card>
         <CardHeader>
           <CardTitle>Laatste tien runs</CardTitle>
-          <CardDescription>Elke vijf minuten draait er een geplande synchronisatie.</CardDescription>
+          <CardDescription>
+            De geplande taak kijkt elke minuut en synchroniseert zodra het ingestelde interval
+            verstreken is.
+          </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {/* Ruimte tussen de kolommen op de cellen zelf: zonder dit lopen een
