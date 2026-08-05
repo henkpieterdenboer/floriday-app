@@ -3,7 +3,7 @@ import { AuthShell } from "@/components/auth/auth-shell";
 import { BrandLogo } from "@/components/brand/brand-logo";
 import { SetPasswordForm } from "./set-password-form";
 
-export const metadata = { title: "Wachtwoord instellen - Floriday middleware" };
+export const metadata = { title: "Wachtwoord instellen - Floriday Middleware" };
 
 interface InvitationPageProps {
   params: Promise<{ token: string }>;

@@ -4,7 +4,7 @@ import { listUsers } from "@/features/auth/users";
 import { AddUserForm } from "./add-user-form";
 import { UsersTable, type UserRowData } from "./users-table";
 
-export const metadata = { title: "Gebruikers - Floriday middleware" };
+export const metadata = { title: "Gebruikers - Floriday Middleware" };
 
 function formatLastLogin(date: Date | null): string | null {
   if (!date) return null;

@@ -1,0 +1,362 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { beoordeelSync, beschrijfDuur, type Stoplicht } from "@/features/sync-status/health";
+import {
+  haalArchiefTelling,
+  haalCursors,
+  haalFeedBovengrens,
+  haalLaatsteRuns,
+  haalLaatsteWijzigingen,
+} from "@/features/sync-status/queries";
+import { formatInteger, formatPrice } from "@/features/supply-search/format";
+import { cn } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Koppelingsstatus - Floriday Middleware" };
+
+const KLEUREN: Record<Stoplicht, { stip: string; rand: string; vlak: string }> = {
+  groen: {
+    stip: "bg-emerald-500",
+    rand: "border-emerald-200 dark:border-emerald-900",
+    vlak: "bg-emerald-50 dark:bg-emerald-950/40",
+  },
+  oranje: {
+    stip: "bg-amber-500",
+    rand: "border-amber-200 dark:border-amber-900",
+    vlak: "bg-amber-50 dark:bg-amber-950/40",
+  },
+  rood: {
+    stip: "bg-red-500",
+    rand: "border-red-200 dark:border-red-900",
+    vlak: "bg-red-50 dark:bg-red-950/40",
+  },
+};
+
+function tijdstip(date: Date): string {
+  return new Intl.DateTimeFormat("nl-NL", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Amsterdam",
+  }).format(date);
+}
+
+/**
+ * "3s", "4m 12s", "2u 5m". Een mislukte backfill kan uren hebben gedraaid voordat hij
+ * opgaf; "14624s" is dan wel juist maar onleesbaar.
+ */
+function duurTekst(seconden: number): string {
+  if (seconden < 60) return `${Math.max(1, Math.round(seconden))}s`;
+  const minuten = Math.floor(seconden / 60);
+  if (minuten < 60) return `${minuten}m ${Math.round(seconden % 60)}s`;
+  return `${Math.floor(minuten / 60)}u ${minuten % 60}m`;
+}
+
+function Kerncijfer({
+  label,
+  waarde,
+  onder,
+}: {
+  label: string;
+  waarde: string;
+  onder?: string;
+}) {
+  return (
+    <div className="rounded-lg border bg-card px-4 py-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 font-mono text-lg leading-tight font-medium tabular-nums">{waarde}</div>
+      {onder ? <div className="mt-0.5 text-xs text-muted-foreground">{onder}</div> : null}
+    </div>
+  );
+}
+
+export default async function StatusPage() {
+  const nu = new Date();
+
+  const [runs, wijzigingen, telling, cursors, feed] = await Promise.all([
+    haalLaatsteRuns(10),
+    haalLaatsteWijzigingen(50),
+    haalArchiefTelling(),
+    haalCursors(),
+    haalFeedBovengrens(),
+  ]);
+
+  const laatste = runs[0] ?? null;
+  const laatsteGeslaagd = runs.find((r) => r.status === "SUCCEEDED") ?? null;
+
+  // De bovengrens komt live van Floriday, de cursor uit onze database. Alleen als we beide
+  // hebben kan er een uitspraak over "bij zijn" gedaan worden.
+  const bijgewerkt =
+    feed.bovengrens === null || cursors.aanbod === null
+      ? null
+      : cursors.aanbod >= feed.bovengrens;
+
+  const gezondheid = beoordeelSync({
+    laatsteGeslaagdeRun: laatsteGeslaagd?.finishedAt ?? null,
+    laatsteStatus: (laatste?.status as "SUCCEEDED" | "FAILED" | "RUNNING" | undefined) ?? null,
+    waarschuwing: laatste?.warning ?? null,
+    bijgewerkt,
+    nu,
+  });
+
+  const kleur = KLEUREN[gezondheid.kleur];
+  const achterstand =
+    feed.bovengrens !== null && cursors.aanbod !== null ? feed.bovengrens - cursors.aanbod : null;
+
+  return (
+    <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
+      <div>
+        <h1 className="text-xl font-semibold">Koppelingsstatus</h1>
+        <p className="text-sm text-muted-foreground">
+          De verbinding met de Floriday customers-API en wat er binnenkomt.
+        </p>
+      </div>
+
+      <div className={cn("flex items-start gap-4 rounded-xl border p-5", kleur.rand, kleur.vlak)}>
+        <span className="relative mt-1 flex h-3.5 w-3.5 shrink-0">
+          {gezondheid.kleur === "groen" ? (
+            <span
+              className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-60", kleur.stip)}
+            />
+          ) : null}
+          <span className={cn("relative inline-flex h-3.5 w-3.5 rounded-full", kleur.stip)} />
+        </span>
+        <div className="min-w-0">
+          <div className="font-medium">{gezondheid.kop}</div>
+          {gezondheid.toelichting ? (
+            <p className="mt-1 text-sm text-muted-foreground">{gezondheid.toelichting}</p>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {laatsteGeslaagd?.finishedAt
+                ? `Laatste synchronisatie ${beschrijfDuur(
+                    (nu.getTime() - laatsteGeslaagd.finishedAt.getTime()) / 60_000,
+                  )} geleden, om ${tijdstip(laatsteGeslaagd.finishedAt)}.`
+                : ""}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Kerncijfer
+          label="Ons volgnummer"
+          waarde={cursors.aanbod === null ? "—" : cursors.aanbod.toString()}
+          onder="laatst verwerkte sequenceNumber"
+        />
+        <Kerncijfer
+          label="Volgnummer bij Floriday"
+          waarde={feed.bovengrens === null ? "niet op te halen" : feed.bovengrens.toString()}
+          onder={
+            feed.bovengrens === null
+              ? "max-sequence-number gaf een fout"
+              : achterstand !== null && achterstand > 0n
+                ? `${achterstand} achter`
+                : "gelijk — volledig bijgewerkt"
+          }
+        />
+        <Kerncijfer
+          label="Laatste synchronisatie"
+          waarde={laatsteGeslaagd?.finishedAt ? tijdstip(laatsteGeslaagd.finishedAt) : "—"}
+          onder={
+            laatsteGeslaagd?.finishedAt
+              ? `${beschrijfDuur((nu.getTime() - laatsteGeslaagd.finishedAt.getTime()) / 60_000)} geleden`
+              : "nog geen geslaagde run"
+          }
+        />
+        <Kerncijfer
+          label="Regels bijgewerkt"
+          waarde={laatsteGeslaagd ? formatInteger(laatsteGeslaagd.rowsProcessed) : "—"}
+          onder={
+            laatsteGeslaagd
+              ? `${formatInteger(laatsteGeslaagd.versionsAdded)} nieuwe versies, ${laatsteGeslaagd.pagesProcessed} pagina's`
+              : ""
+          }
+        />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Het archief</CardTitle>
+          <CardDescription>
+            Wat er is opgeslagen. Floriday bewaart aanbodregels zelf veertien dagen; alles
+            daarvoor bestaat alleen nog hier.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Kerncijfer label="Aanbodregels" waarde={formatInteger(telling.regels)} />
+          <Kerncijfer
+            label="Versies"
+            waarde={formatInteger(telling.versies)}
+            onder={`${formatInteger(telling.versies - telling.regels)} mutaties`}
+          />
+          <Kerncijfer label="Nu beschikbaar" waarde={formatInteger(telling.beschikbaar)} />
+          <Kerncijfer label="Artikelen" waarde={formatInteger(telling.artikelen)} />
+          <Kerncijfer label="Organisaties" waarde={formatInteger(telling.organisaties)} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Laatste tien runs</CardTitle>
+          <CardDescription>Elke vijf minuten draait er een geplande synchronisatie.</CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {/* Ruimte tussen de kolommen op de cellen zelf: zonder dit lopen een
+              rechts-uitgelijnd getal en de kolom erna tegen elkaar aan. */}
+          <table className="w-full text-sm [&_td]:pr-4 [&_th]:pr-4 [&_td:last-child]:pr-0 [&_th:last-child]:pr-0">
+            <thead>
+              <tr className="border-b text-left text-xs text-muted-foreground">
+                <th className="pb-2 font-medium">Gestart</th>
+                <th className="pb-2 font-medium">Aanleiding</th>
+                <th className="pb-2 font-medium">Uitkomst</th>
+                <th className="pb-2 text-right font-medium">Pagina&apos;s</th>
+                <th className="pb-2 text-right font-medium">Regels</th>
+                <th className="pb-2 text-right font-medium">Versies</th>
+                <th className="pb-2 font-medium">Duur</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-6 text-center text-muted-foreground">
+                    Nog geen enkele run vastgelegd.
+                  </td>
+                </tr>
+              ) : (
+                runs.map((run) => {
+                  const duur =
+                    run.finishedAt !== null
+                      ? duurTekst((run.finishedAt.getTime() - run.startedAt.getTime()) / 1000)
+                      : "loopt nog";
+                  return (
+                    <tr key={run.id} className="border-b last:border-0 align-top">
+                      <td className="py-2 whitespace-nowrap">{tijdstip(run.startedAt)}</td>
+                      <td className="py-2 text-muted-foreground">{run.trigger.toLowerCase()}</td>
+                      <td className="py-2">
+                        <Badge
+                          variant={
+                            run.status === "SUCCEEDED"
+                              ? "secondary"
+                              : run.status === "FAILED"
+                                ? "destructive"
+                                : "outline"
+                          }
+                        >
+                          {run.status === "SUCCEEDED"
+                            ? "geslaagd"
+                            : run.status === "FAILED"
+                              ? "mislukt"
+                              : "loopt"}
+                        </Badge>
+                        {run.errorMessage ? (
+                          <div className="mt-1 max-w-md text-xs text-destructive">
+                            {run.errorMessage}
+                          </div>
+                        ) : null}
+                        {run.warning ? (
+                          <div className="mt-1 max-w-md text-xs text-muted-foreground">
+                            {run.warning}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">{run.pagesProcessed}</td>
+                      <td className="py-2 text-right tabular-nums">
+                        {formatInteger(run.rowsProcessed)}
+                      </td>
+                      <td className="py-2 text-right tabular-nums">
+                        {formatInteger(run.versionsAdded)}
+                      </td>
+                      <td className="py-2 whitespace-nowrap text-muted-foreground">{duur}</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Laatste vijftig wijzigingen</CardTitle>
+          <CardDescription>
+            Wat er als laatste binnenkwam. &ldquo;Nieuw&rdquo; is een regel die wij niet eerder
+            zagen; een hoger versienummer betekent dat een bestaande regel veranderde.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          {/* Ruimte tussen de kolommen op de cellen zelf: zonder dit lopen een
+              rechts-uitgelijnd getal en de kolom erna tegen elkaar aan. */}
+          <table className="w-full text-sm [&_td]:pr-4 [&_th]:pr-4 [&_td:last-child]:pr-0 [&_th:last-child]:pr-0">
+            <thead>
+              <tr className="border-b text-left text-xs text-muted-foreground">
+                <th className="pb-2 font-medium">Gezien</th>
+                <th className="pb-2 font-medium">Artikel</th>
+                <th className="pb-2 font-medium">Kweker</th>
+                <th className="pb-2 font-medium">Status</th>
+                <th className="pb-2 text-right font-medium">Stuks</th>
+                <th className="pb-2 text-right font-medium">Prijs</th>
+                <th className="pb-2 font-medium">Versie</th>
+                <th className="pb-2 text-right font-medium">Volgnummer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {wijzigingen.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-6 text-center text-muted-foreground">
+                    Nog niets binnengekomen.
+                  </td>
+                </tr>
+              ) : (
+                wijzigingen.map((w) => (
+                  <tr key={`${w.supplyLineId}-${w.sequenceNumber}`} className="border-b last:border-0">
+                    <td className="py-1.5 whitespace-nowrap text-muted-foreground">
+                      {tijdstip(w.observedAt)}
+                    </td>
+                    <td className="max-w-[16rem] truncate py-1.5">{w.artikel ?? "—"}</td>
+                    <td className="max-w-[12rem] truncate py-1.5 text-muted-foreground">
+                      {w.kweker ?? "—"}
+                    </td>
+                    <td className="py-1.5">
+                      <span
+                        className={cn(
+                          "text-xs",
+                          w.status === "AVAILABLE" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+                        )}
+                      >
+                        {w.status === "AVAILABLE" ? "beschikbaar" : "niet beschikbaar"}
+                      </span>
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {formatInteger(w.numberOfPieces)}
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums">
+                      {formatPrice(Number(w.pricePerPiece), "EUR")}
+                    </td>
+                    <td className="py-1.5">
+                      {w.versie === 1 ? (
+                        <Badge variant="outline">nieuw</Badge>
+                      ) : (
+                        <Badge variant="secondary">versie {w.versie}</Badge>
+                      )}
+                    </td>
+                    <td className="py-1.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                      {w.sequenceNumber.toString()}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
+
+      {feed.fout ? (
+        <p className="text-xs text-muted-foreground">
+          De bovengrens van de feed kon niet worden opgehaald: {feed.fout}
+        </p>
+      ) : null}
+    </div>
+  );
+}

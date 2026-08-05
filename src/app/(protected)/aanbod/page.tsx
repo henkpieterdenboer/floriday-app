@@ -11,7 +11,7 @@ import { Pagination } from "./pagination";
 import { Freshness } from "./freshness";
 import { EmptyState } from "./empty-state";
 
-export const metadata: Metadata = { title: "Aanbod - Floriday middleware" };
+export const metadata: Metadata = { title: "Aanbod - Floriday Middleware" };
 
 interface AanbodPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

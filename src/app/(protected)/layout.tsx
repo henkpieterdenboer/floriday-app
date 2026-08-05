@@ -17,8 +17,14 @@ export default async function ProtectedLayout({ children }: { children: React.Re
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b bg-card px-4 py-3">
         <nav className="flex items-center gap-4 text-sm">
+          {/* De naam hoort in beeld: dit is een tussenlaag tussen Floriday en onze eigen
+              systemen, en dat is precies wat mensen erover moeten weten. */}
+          <span className="font-heading pr-2 font-semibold">Floriday Middleware</span>
           <Link href="/aanbod" className="font-medium">
             Aanbod
+          </Link>
+          <Link href="/status" className="font-medium">
+            Koppeling
           </Link>
           {isAdmin ? (
             <Link href="/beheer/gebruikers" className="font-medium">

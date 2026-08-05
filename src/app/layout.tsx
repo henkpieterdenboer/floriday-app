@@ -9,7 +9,7 @@ import { isDemoModeAllowed, resolveBanner } from "@/features/environment/environ
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
 
-export const metadata = { title: "Floriday middleware" };
+export const metadata = { title: "Floriday Middleware" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // In de root layout en niet in de beschermde layout, zodat de balk ook op het

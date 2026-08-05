@@ -6,7 +6,7 @@ import { entraErrorMessage } from "@/features/auth/entra-error-messages";
 import { isSafeRedirectPath } from "@/features/auth/safe-redirect";
 import { LoginForm } from "./login-form";
 
-export const metadata = { title: "Aanmelden - Floriday middleware" };
+export const metadata = { title: "Aanmelden - Floriday Middleware" };
 
 interface LoginPageProps {
   searchParams: Promise<{ fout?: string; verder?: string }>;
@@ -31,7 +31,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               size="h-12"
             />
           </div>
-          <CardTitle className="text-center text-2xl font-bold">Aanmelden</CardTitle>
+          <CardTitle className="text-center text-2xl font-bold">Floriday Middleware</CardTitle>
           <CardDescription className="text-center">
             Toegang tot het aanbod van Floriday.
           </CardDescription>

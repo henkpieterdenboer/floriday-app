@@ -92,7 +92,7 @@ export async function sendMail(mail: Mail): Promise<string | null> {
   const transporter = await getTransporter(routing.useResend, env);
 
   const info = await transporter.sendMail({
-    from: env.MAIL_FROM ?? "Floriday middleware <noreply@coloriginz.com>",
+    from: env.MAIL_FROM ?? "Floriday Middleware <noreply@coloriginz.com>",
     to: routing.to,
     subject: routing.subject,
     text: mail.text,
