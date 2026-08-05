@@ -44,15 +44,15 @@ describe("resolveRedirectTarget", () => {
     expect(resolveRedirectTarget("/beheer/gebruikers")).toBe("/beheer/gebruikers");
   });
 
-  it("falls back to /aanbod when nothing was requested", () => {
-    expect(resolveRedirectTarget(null)).toBe("/aanbod");
-    expect(resolveRedirectTarget(undefined)).toBe("/aanbod");
-    expect(resolveRedirectTarget("")).toBe("/aanbod");
+  it("falls back to the status page when nothing was requested", () => {
+    expect(resolveRedirectTarget(null)).toBe("/status");
+    expect(resolveRedirectTarget(undefined)).toBe("/status");
+    expect(resolveRedirectTarget("")).toBe("/status");
   });
 
-  it("falls back to /aanbod when the request is an open-redirect attempt", () => {
-    expect(resolveRedirectTarget("//evil.example")).toBe("/aanbod");
-    expect(resolveRedirectTarget("https://evil.example")).toBe("/aanbod");
-    expect(resolveRedirectTarget("/\\evil.example")).toBe("/aanbod");
+  it("falls back to the status page when the request is an open-redirect attempt", () => {
+    expect(resolveRedirectTarget("//evil.example")).toBe("/status");
+    expect(resolveRedirectTarget("https://evil.example")).toBe("/status");
+    expect(resolveRedirectTarget("/\\evil.example")).toBe("/status");
   });
 });

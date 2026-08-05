@@ -25,5 +25,5 @@ export default auth((request) => {
  * synchronisatie zonder dat iemand het merkt.
  */
 export const config = {
-  matcher: ["/aanbod/:path*", "/beheer/:path*"],
+  matcher: ["/status/:path*", "/aanbod/:path*", "/beheer/:path*"],
 };

@@ -1,4 +1,10 @@
-const DEFAULT_TARGET = "/aanbod";
+/**
+ * Waar je belandt als er geen bewuste bestemming is. De API-status en niet het aanbod: het
+ * eerste wat je wilt weten is of de koppeling loopt en hoe vers de gegevens zijn. Staat het
+ * stoplicht op rood, dan zegt een aanbodscherm vol oude regels niets. Zelfde keuze als in
+ * `src/app/page.tsx`, die de wortel van de site naar /status stuurt.
+ */
+const DEFAULT_TARGET = "/status";
 
 /**
  * Checks whether a redirect target is a path within this application. Used for the `verder`
