@@ -48,15 +48,15 @@ Beste Arjan,
 
 Zoals ook per Teams al even getikt, bijgaand alvast een mail met een paar vragen. Wellicht dat deze ook goed in het Slack kanaal passen, maar daarvoor hebben we de uitnodiging volgens mij nog niet binnen? Daarom ook alvast zo even.
 
-1. Grootste vraag zit eigenlijk rond wat de API serveert. De API is 'clock-presales-supply', maar is het ook alleen maar presales? Als ik het goed begreep is dit al het aanbod en neemt het nummer wat af door KVV, maar gaat het restant door naar de klok. Wel fijn om even je bevestiging te hebben daar. 
+1. Grootste vraag zit eigenlijk rond wat de API serveert. De API is 'clock-presales-supply', maar is het ook alleen maar presales? Als ik het goed begreep is dit al het aanbod en neemt het nummer wat af door KVV, maar gaat het restant door naar de klok. En, komt elke klokpartij inderdaad door de pre-sale heen? Wel fijn om even je bevestiging te hebben daar. 
 2. In de data vinden we 'numberOfPieces'. Daalt dat nummer als er klokvoorverkoop plaatsvindt? Of is dit het origineel aangeboden aantal? Is er dan op een andere manier uit de API te halen welke pieces in de voorverkoop inmiddels verkocht zijn?
 3. We zien een status 'UNAVAILABLE' en nemen daarbij even aan dat een item dan niet meer available is voor voorverkoop en naar de klok gaat? Als bij een volgende sync het numberOfPieces naar 0 gedaald is, betekent dat dan dat alles in KVV verkocht is?
 
-Bovenstaande vragen richten zich eigenlijk allemaal op de vraag hoe een aangemelde partij zich door KVV naar de klok beweegt en wat de data betekent die de API weergeeft. Omdat het stage-data is, is het ook moeilijk met de live floriday pagina te valideren. Aangezien we niet veel meer spannends doen dan aanbod ophalen is het wellicht een idee om voor deze applicatie binnen afzienbare tijd door te stappen naar de productie-omgeving; dan kunnen we dit soort zaken ook zelf valideren met de online omgeving. 
+Bovenstaande vragen richten zich eigenlijk allemaal op de vraag hoe een aangemelde partij zich door KVV naar de klok beweegt en wat de data betekent die de API weergeeft. Omdat het stage-data is, is het ook moeilijk met de live floriday pagina te valideren. Aangezien we niet veel meer spannends doen dan aanbod ophalen is het wellicht een idee om met deze applicatie binnen snel door te stappen naar de productie-omgeving; dan kunnen we dit soort zaken ook zelf valideren met de online omgeving. 
 
-Goed om elkaar nog even te spreken voor je vakantie denk ik? Ik zal het morgen iig nog even proberen.
+Zullen we morgen nog even bellen? Dan tikken we bovenstaande denk ik in tien minuten door.
 
-groet,
+Thanks en groet,
 Henk Pieter
 
 
