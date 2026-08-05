@@ -398,6 +398,16 @@ records nu over en gaan door, in plaats van de hele pagina te laten mislukken.
 **5.2** Hetzelfde gebeurt bij aanbodregels: gemiddeld 3 tot 7 van elke 1000 records in een
 pagina falen op validatie. Zelfde vraag.
 
+> **Nogmaals waargenomen op 5 augustus 2026, en het is inderdaad tijdelijk.** Tijdens de
+> eerste vulling van onze productieomgeving werd 1 van de 1000 records in de pagina bij
+> volgnummer `500520894` afgekeurd. Toen wij diezelfde pagina kort daarna opnieuw opvroegen,
+> kwamen alle duizend records geldig terug — het afgekeurde record was er niet meer bij.
+>
+> Dat is hetzelfde patroon als bij 5.1. Wij gaan ervan uit dat het onschuldig is en slaan
+> zulke records over in plaats van de hele pagina te laten mislukken, maar bevestiging dat
+> dit bekend gedrag is zou ons helpen — nu weten we niet of we iets missen dat later wél
+> terecht had moeten komen.
+
 **5.3** Er bestaan aanbodregels met `tradeItemId` = `00000000-0000-0000-0000-000000000000`
 (bij ons 2 stuks). `GET /trade-items/{id}` geeft daarop een 404. Wat betekent zo'n
 nul-UUID — een placeholder, of een fout?

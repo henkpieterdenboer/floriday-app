@@ -142,7 +142,7 @@ export async function syncOrganizations(
     if (skipped > 0) {
       warning =
         `Skipped ${skipped} malformed organization record(s) out of ${rawResults.length} ` +
-        `in the page at cursor ${cursor}; see logs for details.`;
+        `in the page at cursor ${cursor}.`;
       console.warn(warning);
     }
 

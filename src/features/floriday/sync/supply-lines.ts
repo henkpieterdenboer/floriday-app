@@ -206,7 +206,7 @@ export async function syncSupplyLines(
     if (skipped > 0) {
       warning =
         `Skipped ${skipped} malformed supply line record(s) out of ${rawResults.length} ` +
-        `in the page at cursor ${cursor}; see logs for details.`;
+        `in the page at cursor ${cursor}.`;
       console.warn(warning);
     }
 

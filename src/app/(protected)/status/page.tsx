@@ -198,10 +198,6 @@ export default async function StatusPage() {
       <Card>
         <CardHeader>
           <CardTitle>Instellingen van deze omgeving</CardTitle>
-          <CardDescription>
-            Wat er is ingesteld, zonder de waarden zelf. Een leeg overzicht heeft hier meestal
-            zijn verklaring.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border bg-card px-4 py-3">
@@ -234,17 +230,13 @@ export default async function StatusPage() {
             waarde={config.floridayOmgeving}
             onder="afgeleid uit de api-url"
           />
-          <Kerncijfer label="Draait op" waarde={config.omgeving} onder="VERCEL_ENV" />
+          <Kerncijfer label="Draait op" waarde={config.omgeving} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>Het archief</CardTitle>
-          <CardDescription>
-            Wat er is opgeslagen. Floriday bewaart aanbodregels zelf veertien dagen; alles
-            daarvoor bestaat alleen nog hier.
-          </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <Kerncijfer label="Aanbodregels" waarde={formatInteger(telling.regels)} />
