@@ -14,7 +14,6 @@ import { leesConfiguratie } from "@/features/sync-status/configuratie";
 import { VerversKnop } from "./ververs-knop";
 import { IntervalKeuze } from "./interval-keuze";
 import { leesInterval } from "@/features/sync-status/interval-store";
-import { beschrijfInterval } from "@/features/sync-status/interval";
 import { auth } from "@/features/auth/auth-config";
 
 export const dynamic = "force-dynamic";
@@ -205,15 +204,7 @@ export default async function StatusPage() {
             <div className="mt-1 font-mono text-lg leading-tight font-medium">
               {config.synchronisatieAan ? "aan" : "uit"}
             </div>
-            <div className="mt-1.5">
-              {isAdmin ? (
-                <IntervalKeuze huidig={interval} />
-              ) : (
-                <span className="text-xs text-muted-foreground">
-                  {beschrijfInterval(interval)}
-                </span>
-              )}
-            </div>
+            <IntervalKeuze huidig={interval} bewerkbaar={isAdmin} />
             {!config.synchronisatieAan ? (
               <div className="mt-1 text-xs text-muted-foreground">
                 SYNC_ENABLED=false — de taak slaat over
