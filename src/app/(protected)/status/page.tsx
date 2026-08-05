@@ -10,6 +10,7 @@ import {
 } from "@/features/sync-status/queries";
 import { formatInteger, formatPrice } from "@/features/supply-search/format";
 import { cn } from "@/lib/utils";
+import { leesConfiguratie } from "@/features/sync-status/configuratie";
 import { VerversKnop } from "./ververs-knop";
 
 export const dynamic = "force-dynamic";
@@ -93,7 +94,11 @@ export default async function StatusPage() {
       ? null
       : cursors.aanbod >= feed.bovengrens;
 
+  const config = leesConfiguratie();
+
   const gezondheid = beoordeelSync({
+    synchronisatieAan: config.synchronisatieAan,
+    ontbrekendeInstellingen: config.ontbrekend,
     laatsteGeslaagdeRun: laatsteGeslaagd?.finishedAt ?? null,
     laatsteStatus: (laatste?.status as "SUCCEEDED" | "FAILED" | "RUNNING" | undefined) ?? null,
     waarschuwing: laatste?.warning ?? null,
@@ -178,6 +183,38 @@ export default async function StatusPage() {
           }
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Instellingen van deze omgeving</CardTitle>
+          <CardDescription>
+            Wat er is ingesteld, zonder de waarden zelf. Een leeg overzicht heeft hier meestal
+            zijn verklaring.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Kerncijfer
+            label="Synchronisatie"
+            waarde={config.synchronisatieAan ? "aan" : "uit"}
+            onder={
+              config.synchronisatieAan
+                ? "de geplande taak haalt op"
+                : "SYNC_ENABLED=false — de taak slaat over"
+            }
+          />
+          <Kerncijfer
+            label="Floriday-gegevens"
+            waarde={config.ontbrekend.length === 0 ? "compleet" : `${config.ontbrekend.length} ontbreekt`}
+            onder={config.ontbrekend.length === 0 ? "alle vijf ingevuld" : config.ontbrekend.join(", ")}
+          />
+          <Kerncijfer
+            label="Floriday-omgeving"
+            waarde={config.floridayOmgeving}
+            onder="afgeleid uit de api-url"
+          />
+          <Kerncijfer label="Draait op" waarde={config.omgeving} onder="VERCEL_ENV" />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

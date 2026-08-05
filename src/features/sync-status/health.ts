@@ -16,6 +16,13 @@ export interface SyncGezondheid {
 }
 
 export interface GezondheidInvoer {
+  /**
+   * Staat de synchronisatie aan (SYNC_ENABLED)? Staat hij uit, dan slaat de geplande taak
+   * over zonder iets te loggen - dan is een leeg overzicht geen storing maar een keuze.
+   */
+  synchronisatieAan: boolean;
+  /** Floriday-instellingen die leeg zijn. Zonder die gegevens kan er niets opgehaald worden. */
+  ontbrekendeInstellingen: string[];
   /** Afronding van de laatste geslaagde run, of null als die er nooit was. */
   laatsteGeslaagdeRun: Date | null;
   /** Status van de meest recente run, ongeacht uitkomst. */
@@ -47,15 +54,48 @@ function minutenGeleden(vanaf: Date, nu: Date): number {
 }
 
 export function beoordeelSync(invoer: GezondheidInvoer): SyncGezondheid {
-  const { laatsteGeslaagdeRun, laatsteStatus, waarschuwing, bijgewerkt, nu } = invoer;
+  const {
+    synchronisatieAan,
+    ontbrekendeInstellingen,
+    laatsteGeslaagdeRun,
+    laatsteStatus,
+    waarschuwing,
+    bijgewerkt,
+    nu,
+  } = invoer;
+
+  // Eerst wat de instellingen zeggen, dan pas wat de runs zeggen. Een omgeving die niet is
+  // ingericht hoort te lezen als "nog niet ingericht", niet als "kapot" - dat scheelt zoeken
+  // in de verkeerde hoek.
+  if (ontbrekendeInstellingen.length > 0) {
+    const lijst = ontbrekendeInstellingen.join(", ");
+    return {
+      kleur: "rood",
+      kop: "Floriday-gegevens ontbreken",
+      toelichting:
+        `Deze omgeving mist ${ontbrekendeInstellingen.length === 1 ? "de instelling" : "de instellingen"} ` +
+        `${lijst}. Zonder die gegevens kan er niets opgehaald worden; de rest van de ` +
+        `applicatie werkt wel.`,
+    };
+  }
+
+  if (!synchronisatieAan) {
+    return {
+      kleur: "oranje",
+      kop: "Synchronisatie staat uit",
+      toelichting:
+        "SYNC_ENABLED staat op false, dus de geplande taak slaat elke keer over zonder iets " +
+        "te doen. Zet de variabele op true om weer op te halen.",
+    };
+  }
 
   if (laatsteStatus === null || laatsteGeslaagdeRun === null) {
     return {
       kleur: "rood",
       kop: "Nog niet gesynchroniseerd",
       toelichting:
-        "Er is nog geen geslaagde synchronisatie geweest. Controleer of de Floriday-gegevens " +
-        "zijn ingesteld en of de geplande taak draait.",
+        "De gegevens staan ingevuld en de synchronisatie staat aan, maar er is nog geen " +
+        "geslaagde run geweest. Probeer het met de knop hiernaast.",
     };
   }
 

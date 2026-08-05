@@ -5,6 +5,8 @@ const nu = new Date("2026-08-05T12:00:00Z");
 
 function invoer(overschrijf: Partial<GezondheidInvoer> = {}): GezondheidInvoer {
   return {
+    synchronisatieAan: true,
+    ontbrekendeInstellingen: [],
     laatsteGeslaagdeRun: new Date("2026-08-05T11:58:00Z"),
     laatsteStatus: "SUCCEEDED",
     waarschuwing: null,
@@ -24,7 +26,33 @@ describe("beoordeelSync", () => {
   it("is rood als er nog nooit gesynchroniseerd is", () => {
     const uitkomst = beoordeelSync(invoer({ laatsteGeslaagdeRun: null, laatsteStatus: null }));
     expect(uitkomst.kleur).toBe("rood");
-    expect(uitkomst.toelichting).toMatch(/geplande taak/i);
+    expect(uitkomst.toelichting).toMatch(/nog geen geslaagde run/i);
+  });
+
+  // Deze drie samen zijn de reden dat de instellingen vóór de runs worden beoordeeld: de
+  // productieomgeving stond dagen op "nog niet gesynchroniseerd" terwijl de geplande taak
+  // keurig draaide en alleen oversloeg. Dat stuurde het zoeken de verkeerde kant op.
+  it("noemt de ontbrekende instellingen bij naam", () => {
+    const uitkomst = beoordeelSync(
+      invoer({ ontbrekendeInstellingen: ["FLORIDAY_CUSTOMERS_API_KEY"] }),
+    );
+    expect(uitkomst.kleur).toBe("rood");
+    expect(uitkomst.kop).toMatch(/gegevens ontbreken/i);
+    expect(uitkomst.toelichting).toContain("FLORIDAY_CUSTOMERS_API_KEY");
+  });
+
+  it("meldt een uitgeschakelde synchronisatie als keuze, niet als storing", () => {
+    const uitkomst = beoordeelSync(invoer({ synchronisatieAan: false }));
+    expect(uitkomst.kleur).toBe("oranje");
+    expect(uitkomst.kop).toMatch(/staat uit/i);
+    expect(uitkomst.toelichting).toMatch(/SYNC_ENABLED/);
+  });
+
+  it("meldt ontbrekende gegevens vóór een uitgeschakelde synchronisatie", () => {
+    const uitkomst = beoordeelSync(
+      invoer({ synchronisatieAan: false, ontbrekendeInstellingen: ["FLORIDAY_TOKEN_URL"] }),
+    );
+    expect(uitkomst.kop).toMatch(/gegevens ontbreken/i);
   });
 
   // Een mislukte poging na een geslaagde is nog steeds rood: vanaf dat moment komt er niets
