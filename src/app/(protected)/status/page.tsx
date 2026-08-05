@@ -10,9 +10,10 @@ import {
 } from "@/features/sync-status/queries";
 import { formatInteger, formatPrice } from "@/features/supply-search/format";
 import { cn } from "@/lib/utils";
+import { VerversKnop } from "./ververs-knop";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Koppelingsstatus - Floriday Middleware" };
+export const metadata = { title: "API-status - Floriday Middleware" };
 
 const KLEUREN: Record<Stoplicht, { stip: string; rand: string; vlak: string }> = {
   groen: {
@@ -106,11 +107,14 @@ export default async function StatusPage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Koppelingsstatus</h1>
-        <p className="text-sm text-muted-foreground">
-          De verbinding met de Floriday customers-API en wat er binnenkomt.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">API-status</h1>
+          <p className="text-sm text-muted-foreground">
+            De verbinding met de Floriday customers-API en wat er binnenkomt.
+          </p>
+        </div>
+        <VerversKnop />
       </div>
 
       <div className={cn("flex items-start gap-4 rounded-xl border p-5", kleur.rand, kleur.vlak)}>
