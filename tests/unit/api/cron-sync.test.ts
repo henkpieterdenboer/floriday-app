@@ -86,6 +86,9 @@ describe("GET /api/cron/sync", () => {
       tradeItemsAdded: 4,
       cursor: "123456789012345678901234567890",
       reachedEnd: true,
+      // Deze run leverde geen bovengrens, dus "niet gemeten" - null, niet false.
+      feedMaxSequence: null,
+      caughtUp: null,
       warning: null,
     });
     expect(runSupplySyncMock).toHaveBeenCalledWith({ trigger: "CRON", maxPages: 20 });

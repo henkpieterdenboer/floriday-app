@@ -28,6 +28,23 @@ export interface SyncSupplyLinesOptions {
   maxPages?: number;
   /** Overrides PAGE_SIZE. Exists for tests; production always uses the default. */
   pageSize?: number;
+  /**
+   * The highest sequence number in the whole feed, from
+   * GET /auction/clock-presales-supply/max-sequence-number.
+   *
+   * Floriday's guidance is to keep fetching "until the MaximumSequenceNumber is reached",
+   * and warns that an empty page does not prove you are caught up. The
+   * maximumSequenceNumber *inside* the sync response cannot serve that purpose here:
+   * measured on 5 August 2026 against the real API it is scoped to the page just returned
+   * (limit=10 gave 501526282, limit=1000 gave 501527274, each exactly the highest sequence
+   * number in that response) while the feed max was 501532656. Comparing our post-page
+   * cursor against it is comparing a number to itself.
+   *
+   * This separate endpoint does give a feed-wide bound, so that is what we compare against.
+   * Optional: without it the loop falls back to the page-length check, which is what it did
+   * before and which ends the loop correctly - it just cannot then prove being caught up.
+   */
+  readMaxSequence?: () => Promise<bigint>;
 }
 
 export interface SyncSupplyLinesResult {
@@ -38,6 +55,16 @@ export interface SyncSupplyLinesResult {
   cursor: bigint;
   reachedEnd: boolean;
   warning?: string;
+  /**
+   * The feed-wide maximum at the start of this run, when it could be read. Null when the
+   * endpoint was not consulted or failed.
+   */
+  feedMaxSequence?: bigint | null;
+  /**
+   * Whether the cursor caught up with that maximum. Null when it could not be determined -
+   * deliberately not `false`, so "we did not check" never reads as "we are behind".
+   */
+  caughtUp?: boolean | null;
 }
 
 export async function syncSupplyLines(
@@ -53,6 +80,36 @@ export async function syncSupplyLines(
   let duplicatesCollapsed = 0;
   let reachedEnd = false;
   let warning: string | undefined;
+
+  // Read once, before the first page. A failure here must not sink the run: knowing where
+  // the feed ends is useful, but fetching the rows is the job.
+  let feedMaxSequence: bigint | null = null;
+  if (options.readMaxSequence) {
+    try {
+      feedMaxSequence = await options.readMaxSequence();
+    } catch (error: unknown) {
+      warning =
+        `Could not read the feed maximum sequence number: ` +
+        `${error instanceof Error ? error.message : String(error)}. ` +
+        `The run continues; whether it caught up cannot be confirmed.`;
+    }
+  }
+
+  // Al bij voordat we beginnen: dan is er niets op te halen. Scheelt een verzoek per
+  // cyclus, wat bij een cyclus van vijf minuten optelt.
+  if (feedMaxSequence !== null && cursor >= feedMaxSequence) {
+    return {
+      pagesProcessed: 0,
+      rowsProcessed: 0,
+      versionsAdded: 0,
+      duplicatesCollapsed: 0,
+      cursor,
+      reachedEnd: true,
+      warning,
+      feedMaxSequence,
+      caughtUp: true,
+    };
+  }
 
   while (pagesProcessed < maxPages) {
     const raw = await client.getJson<unknown>(
@@ -179,6 +236,23 @@ export async function syncSupplyLines(
       reachedEnd = true;
       break;
     }
+
+    // The feed-wide bound, when we have it. A full page that already carries us to the end
+    // saves one request that would come back empty.
+    if (feedMaxSequence !== null && cursor >= feedMaxSequence) {
+      reachedEnd = true;
+      break;
+    }
+  }
+
+  // Only meaningful when the loop ran to its natural end. A run capped by maxPages stops
+  // early by design, and calling that "behind" would be true but useless.
+  const bijgewerkt = feedMaxSequence === null ? null : cursor >= feedMaxSequence;
+  if (bijgewerkt === false && reachedEnd) {
+    warning =
+      `Reached the end of the pages at cursor ${cursor}, but the feed reports ` +
+      `${feedMaxSequence} as its highest sequence number. ${feedMaxSequence! - cursor} ` +
+      `behind; the next run should close the gap. Investigate if it persists.`;
   }
 
   return {
@@ -189,5 +263,7 @@ export async function syncSupplyLines(
     cursor,
     reachedEnd,
     warning,
+    feedMaxSequence,
+    caughtUp: bijgewerkt,
   };
 }

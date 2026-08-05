@@ -304,11 +304,16 @@ In volgorde van belang:
 
 1. **Productiegegevens regelen.** Zolang die er niet zijn draait de synchronisatie daar niet,
    en met veertien dagen bewaartermijn is elke dag onherstelbaar.
-2. **De stopconditie van de sync onderbouwen of aanpassen** met het
-   `max-sequence-number`-endpoint, zodat "we zijn bij" een gemeten uitspraak wordt in plaats
-   van een afleiding uit de paginalengte.
-3. **Vaker synchroniseren** dan eens per uur, en de cyclus laten herstarten na verwerking in
-   plaats van op een vaste kloktijd.
+2. ~~De stopconditie van de sync onderbouwen of aanpassen.~~ **Gedaan op 5 augustus 2026.**
+   `syncSupplyLines` leest nu `/auction/clock-presales-supply/max-sequence-number` en
+   rapporteert `caughtUp` — een gemeten uitspraak in plaats van een afleiding uit de
+   paginalengte. Staat de cursor al op de bovengrens, dan gaat er geen verzoek meer uit.
+   Bij een storing op dat endpoint gaat de run gewoon door en is `caughtUp` `null`:
+   niet-weten is iets anders dan achterlopen.
+3. ~~Vaker synchroniseren dan eens per uur.~~ **Gedeeltelijk gedaan.** De cron staat op elke
+   vijf minuten (`*/5 * * * *`). Wat nog openstaat is hun tweede advies: een cyclus die
+   herstart ná verwerking in plaats van op een vaste kloktijd. Dat vraagt een andere
+   aansturing dan Vercel-cron en is nu niet aan de orde.
 4. **Organisaties zonder GLN filteren** in het zoekscherm.
 5. **Uitzoeken of de Floricode-codelijsten gekocht moeten worden** voor productie.
 6. **In de interface duidelijk maken** dat dit voorverkoopaanbod is en niet het volledige

@@ -43,6 +43,10 @@ export async function GET(request: Request): Promise<NextResponse> {
       tradeItemsAdded: result.tradeItemsAdded,
       cursor: result.cursor.toString(),
       reachedEnd: result.reachedEnd,
+      // Uit /auction/clock-presales-supply/max-sequence-number, de enige bron die de hele
+      // feed beschrijft. null betekent "niet gemeten", niet "achter".
+      feedMaxSequence: result.feedMaxSequence?.toString() ?? null,
+      caughtUp: result.caughtUp ?? null,
       warning: result.warning ?? null,
     });
   } catch (error: unknown) {

@@ -189,6 +189,17 @@ async function main(): Promise<void> {
   console.log(`  versies erbij    ${resultaat.versionsAdded.toLocaleString("nl-NL")}`);
   console.log(`  artikelen erbij  ${resultaat.tradeItemsAdded.toLocaleString("nl-NL")}`);
   console.log(`  einde bereikt    ${resultaat.reachedEnd ? "ja" : "nee"}`);
+  // Gemeten tegen /auction/clock-presales-supply/max-sequence-number, de enige bron die de
+  // hele feed beschrijft: "bij" is hier een uitspraak, geen aanname.
+  console.log(
+    `  bijgewerkt       ${
+      resultaat.caughtUp === null || resultaat.caughtUp === undefined
+        ? "niet vast te stellen"
+        : resultaat.caughtUp
+          ? `ja, tot volgnummer ${resultaat.feedMaxSequence}`
+          : `nee, feed staat op ${resultaat.feedMaxSequence}`
+    }`,
+  );
   if (resultaat.warning) console.log(`  let op: ${resultaat.warning}`);
 
   const na = await maakMomentopname();

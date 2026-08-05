@@ -28,6 +28,11 @@ export type RunSupplySyncResult = SyncSupplyLinesResult & { tradeItemsAdded: num
  */
 export interface RunSupplySyncDeps {
   client: FloridayClient;
+  /**
+   * The feed's own highest sequence number. Optional so existing tests keep working with
+   * fakes that do not provide it; production always passes it.
+   */
+  readMaxSequence?: () => Promise<bigint>;
   readCursor: () => Promise<bigint>;
   writeCursor: (sequenceNumber: bigint) => Promise<void>;
   writeSupplyPage: (rows: readonly SupplyLineRow[], observedAt: Date) => Promise<WriteResult>;
@@ -90,6 +95,7 @@ export async function runSupplySyncWith(
       now: deps.now,
       maxPages,
       pageSize,
+      readMaxSequence: deps.readMaxSequence,
     });
 
     const tradeItemsAdded = await topUpTradeItems();
@@ -134,8 +140,12 @@ export async function runSupplySyncWith(
 
 /** Production entry point: wires the real Floriday client and Prisma-backed stores. */
 export async function runSupplySync(options: RunSupplySyncOptions): Promise<RunSupplySyncResult> {
+  const client = createCustomersClient();
   return runSupplySyncWith(options, {
-    client: createCustomersClient(),
+    client,
+    // Bare number in the response body, not an object - verified against the real API.
+    readMaxSequence: async () =>
+      BigInt(await client.getJson<number>("/auction/clock-presales-supply/max-sequence-number")),
     readCursor: () => readCursor(SUPPLY_RESOURCE),
     writeCursor: (sequenceNumber) => writeCursor(SUPPLY_RESOURCE, sequenceNumber),
     writeSupplyPage,

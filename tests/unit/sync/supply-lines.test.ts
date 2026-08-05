@@ -259,4 +259,89 @@ describe("syncSupplyLines", () => {
     expect(result.pagesProcessed).toBe(0);
     expect(result.warning).toMatch(/failed to parse/i);
   });
+
+  // Floriday's guidance is to sync "until the MaximumSequenceNumber is reached". The value
+  // inside the response cannot serve for that - measured against the real API it only ever
+  // describes the page just returned - so the separate max-sequence-number endpoint is what
+  // these tests exercise.
+  describe("de bovengrens van de feed", () => {
+    it("stopt zodra de cursor de bovengrens haalt, ook bij een volle pagina", async () => {
+      // Beide pagina's zijn vol, dus de paginalengte zou blijven doorlopen. De bovengrens
+      // van 2 ligt al na de eerste pagina.
+      const getJson = vi.fn()
+        .mockResolvedValueOnce(page([1, 2], 2))
+        .mockResolvedValueOnce(page([3, 4], 4));
+
+      const result = await syncSupplyLines({
+        client: { getJson },
+        startCursor: 0n,
+        writePage: vi.fn().mockResolvedValue(written()),
+        writeCursor: vi.fn(),
+        now: () => new Date(),
+        pageSize: 2,
+        readMaxSequence: async () => 2n,
+      });
+
+      expect(getJson).toHaveBeenCalledTimes(1);
+      expect(result.cursor).toBe(2n);
+      expect(result.caughtUp).toBe(true);
+      expect(result.warning).toBeUndefined();
+    });
+
+    it("meldt het wanneer de pagina's opraken terwijl de feed verder is", async () => {
+      const getJson = vi.fn().mockResolvedValueOnce(page([1], 1));
+
+      const result = await syncSupplyLines({
+        client: { getJson },
+        startCursor: 0n,
+        writePage: vi.fn().mockResolvedValue(written()),
+        writeCursor: vi.fn(),
+        now: () => new Date(),
+        pageSize: 2,
+        readMaxSequence: async () => 500n,
+      });
+
+      expect(result.caughtUp).toBe(false);
+      expect(result.warning).toMatch(/499 behind/);
+    });
+
+    // Niet weten of je bij bent is iets anders dan weten dat je achterloopt. Zou dit false
+    // teruggeven, dan zou een storing bij het ophalen van de bovengrens als achterstand
+    // gelezen worden.
+    it("geeft null terug wanneer de bovengrens niet gelezen is", async () => {
+      const getJson = vi.fn().mockResolvedValueOnce(page([1], 1));
+
+      const result = await syncSupplyLines({
+        client: { getJson },
+        startCursor: 0n,
+        writePage: vi.fn().mockResolvedValue(written()),
+        writeCursor: vi.fn(),
+        now: () => new Date(),
+        pageSize: 2,
+      });
+
+      expect(result.caughtUp).toBeNull();
+      expect(result.feedMaxSequence).toBeNull();
+    });
+
+    it("synchroniseert door wanneer de bovengrens niet op te halen is", async () => {
+      const getJson = vi.fn().mockResolvedValueOnce(page([1], 1));
+
+      const result = await syncSupplyLines({
+        client: { getJson },
+        startCursor: 0n,
+        writePage: vi.fn().mockResolvedValue(written()),
+        writeCursor: vi.fn(),
+        now: () => new Date(),
+        pageSize: 2,
+        readMaxSequence: async () => {
+          throw new Error("503 van Floriday");
+        },
+      });
+
+      expect(result.rowsProcessed).toBe(2);
+      expect(result.caughtUp).toBeNull();
+      expect(result.warning).toMatch(/503 van Floriday/);
+    });
+  });
 });
