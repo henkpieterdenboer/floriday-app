@@ -12,6 +12,20 @@ import { cn } from "@/lib/utils";
 const LOCATIONS = auctionLocationSchema.options;
 const SEARCH_DEBOUNCE_MS = 300;
 
+/**
+ * Verbergt de periodeknoppen. Het scherm toont dan alleen de periode waar het op staat, als
+ * gewone regel tekst.
+ *
+ * Bewust een constante hier en geen omgevingsvariabele of URL-parameter: het is één stand
+ * voor iedereen, en `?eenvoudig=1` verdwijnt zodra je op iets klikt. Op `true` zetten brengt
+ * de knoppen terug, verder is er niets voor nodig.
+ *
+ * Aan de filtering verandert dit niets. `parseFilters` leest de periode nog steeds uit de
+ * URL en valt zonder parameters terug op de standaardperiode, dus een gedeelde link met
+ * `?preset=deze-week` blijft gewoon werken - je kunt de periode alleen niet meer aanklikken.
+ */
+const TOON_PERIODEKEUZE: boolean = false;
+
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -109,7 +123,14 @@ export function FilterBar({
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Periode">
+      {TOON_PERIODEKEUZE ? null : (
+        <div className="text-sm">
+          <span className="text-muted-foreground">Periode</span>{" "}
+          <span className="font-medium">{formatRange(filters.range)}</span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Periode" hidden={!TOON_PERIODEKEUZE}>
         {PRESETS.filter((preset) => !alleenActievePeriode || filters.preset === preset.id).map((preset) => {
           const range = resolvePreset(preset.id, nowDate);
           const active = filters.preset === preset.id;
@@ -159,7 +180,7 @@ export function FilterBar({
         </button>
       </div>
 
-      {customOpen ? (
+      {TOON_PERIODEKEUZE && customOpen ? (
         <div className="flex flex-wrap items-end gap-2 border-t pt-3">
           <label className="flex flex-col gap-1 text-sm">
             Van
