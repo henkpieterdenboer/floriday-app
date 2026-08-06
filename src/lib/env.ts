@@ -18,6 +18,13 @@ export const envSchema = z.object({
   FLORIDAY_CUSTOMERS_CLIENT_SECRET: z.string().optional(),
   FLORIDAY_CUSTOMERS_API_KEY: z.string().optional(),
 
+  // RFH Pre-Auction. Zelfde afweging als bij Floriday hierboven: optioneel in het brede
+  // schema, streng gecontroleerd door getRfhEnv() vlak voor een verzoek. De refresh token
+  // staat hier bewust niet tussen - die woont in RfhSession, omdat hij rouleert.
+  RFH_PREAUCTION_API_BASE_URL: z.string().url().optional(),
+  RFH_PREAUCTION_TOKEN_URL: z.string().url().optional(),
+  RFH_PREAUCTION_CLIENT_ID: z.string().optional(),
+
   CRON_SECRET: z.string().min(1),
 
   // Zet op "false" om de uurlijkse synchronisatie stil te leggen. Bedoeld voor een omgeving
@@ -103,6 +110,37 @@ export function getFloridayEnv(): FloridayEnv {
     throw new Error(
       `Floriday is niet volledig geconfigureerd: ${details}. ` +
         "Zonder deze gegevens kan er niet met Floriday gesynchroniseerd worden; " +
+        "de rest van de applicatie werkt wel.",
+    );
+  }
+  return parsed.data;
+}
+
+const rfhSchema = z.object({
+  RFH_PREAUCTION_API_BASE_URL: z.string().url(),
+  RFH_PREAUCTION_TOKEN_URL: z.string().url(),
+  RFH_PREAUCTION_CLIENT_ID: z.string().min(1),
+});
+
+export type RfhEnv = z.infer<typeof rfhSchema>;
+
+/**
+ * De RFH Pre-Auction-gegevens, streng gecontroleerd.
+ *
+ * Let op: dit zijn alleen de vaste gegevens. De sessie zelf - de refresh token - staat in
+ * RfhSession en wordt door session-store.ts gelezen. Een omgeving die deze drie wel heeft
+ * maar nog nooit gekoppeld is, komt dus tot hier en faalt daarna op een leesbare manier in
+ * de sessielaag; dat is precies het onderscheid dat we willen kunnen zien.
+ */
+export function getRfhEnv(): RfhEnv {
+  const parsed = rfhSchema.safeParse(process.env);
+  if (!parsed.success) {
+    const details = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join(", ");
+    throw new Error(
+      `RFH Pre-Auction is niet volledig geconfigureerd: ${details}. ` +
+        "Zonder deze gegevens kan het klokaanbod niet opgehaald worden; " +
         "de rest van de applicatie werkt wel.",
     );
   }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { envSchema, getEnv, getFloridayEnv, resetEnvCache } from "@/lib/env";
+import { envSchema, getEnv, getFloridayEnv, getRfhEnv, resetEnvCache } from "@/lib/env";
 
 const valid = {
   DATABASE_URL: "postgresql://user:pass@host/db?sslmode=require",
@@ -128,5 +128,39 @@ describe("getFloridayEnv", () => {
     process.env = { ...origineel, ...compleet };
     delete process.env.FLORIDAY_CUSTOMERS_CLIENT_ID;
     expect(() => getFloridayEnv()).toThrow(/rest van de applicatie werkt wel/);
+  });
+});
+
+describe("getRfhEnv", () => {
+  const origineel = process.env;
+
+  afterEach(() => {
+    process.env = origineel;
+  });
+
+  it("throws a readable error when the RFH variables are missing", () => {
+    process.env = { ...origineel };
+    delete process.env.RFH_PREAUCTION_API_BASE_URL;
+    delete process.env.RFH_PREAUCTION_TOKEN_URL;
+    delete process.env.RFH_PREAUCTION_CLIENT_ID;
+
+    expect(() => getRfhEnv()).toThrow(/RFH Pre-Auction is niet volledig geconfigureerd/);
+  });
+
+  it("returns the three values when they are all present", () => {
+    process.env = {
+      ...origineel,
+      RFH_PREAUCTION_API_BASE_URL: "https://pre-auction-api.staging.rfh-auction.com/v16.0",
+      RFH_PREAUCTION_TOKEN_URL:
+        "https://idm.staging.floriday.io/oauth2/aus1w6civoyW4EdjE0h8/v1/token",
+      RFH_PREAUCTION_CLIENT_ID: "0oa19yrfd96Maphyz0h8",
+    };
+
+    expect(getRfhEnv()).toEqual({
+      RFH_PREAUCTION_API_BASE_URL: "https://pre-auction-api.staging.rfh-auction.com/v16.0",
+      RFH_PREAUCTION_TOKEN_URL:
+        "https://idm.staging.floriday.io/oauth2/aus1w6civoyW4EdjE0h8/v1/token",
+      RFH_PREAUCTION_CLIENT_ID: "0oa19yrfd96Maphyz0h8",
+    });
   });
 });
