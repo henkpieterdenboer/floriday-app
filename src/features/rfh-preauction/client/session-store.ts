@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
 /** One row, always. The default matches RfhSession.id's default in the schema. */
@@ -16,14 +17,33 @@ export interface RfhSessie {
   lastError: string | null;
 }
 
-export async function leesSessie(): Promise<RfhSessie | null> {
-  const rij = await prisma.rfhSession.findUnique({ where: { id: SESSIE_ID } });
-  if (!rij) return null;
-  return {
-    refreshToken: rij.refreshToken,
-    lastRefreshedAt: rij.lastRefreshedAt,
-    lastError: rij.lastError,
-  };
+/**
+ * Drie uitkomsten, niet twee: `null` betekent "tabel bestaat, nog nooit gekoppeld" - de
+ * status waar de rest van dit bestand op rekent. `undefined` betekent "de RfhSession-tabel
+ * bestaat hier nog niet" - het scenario van vóór `npm run db:push`, dat op 5 augustus 2026
+ * de hele statuspagina liet crashen toen AppSetting hetzelfde overkwam (zie
+ * scripts/db-push.mjs). Beide zijn een lege staat, maar de statuspagina moet ze uit elkaar
+ * kunnen houden: het eerste vraagt om `npm run rfh-koppel`, het tweede om een schema-push.
+ */
+export async function leesSessie(): Promise<RfhSessie | null | undefined> {
+  try {
+    const rij = await prisma.rfhSession.findUnique({ where: { id: SESSIE_ID } });
+    if (!rij) return null;
+    return {
+      refreshToken: rij.refreshToken,
+      lastRefreshedAt: rij.lastRefreshedAt,
+      lastError: rij.lastError,
+    };
+  } catch (error: unknown) {
+    // P2021: "The table `...` does not exist in the current database." Alleen deze ene
+    // reden wordt stilgehouden - elke andere databasefout (verbinding weg, credentials fout)
+    // moet gewoon naar boven blijven komen in plaats van hier hetzelfde te lijken als een
+    // omgeving die simpelweg nog wacht op de schema-push.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021") {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 /** Used by scripts/rfh-koppel.ts to seed or replace the session by hand. */

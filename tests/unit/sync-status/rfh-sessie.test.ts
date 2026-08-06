@@ -9,6 +9,15 @@ describe("beoordeelSessie", () => {
     });
   });
 
+  // undefined is niet hetzelfde als null: dit is de omgeving die de RfhSession-tabel nog
+  // helemaal niet heeft, niet een omgeving die hem heeft maar nooit gekoppeld is. Zie
+  // session-store.ts, leesSessie.
+  it("reports not available when the RfhSession table does not exist yet", () => {
+    const oordeel = beoordeelSessie(undefined, new Date());
+    expect(oordeel.toestand).toBe("niet-beschikbaar");
+    expect(oordeel.bericht).toMatch(/db:push/);
+  });
+
   it("reports expired when the last attempt failed", () => {
     const sessie = {
       refreshToken: "x",

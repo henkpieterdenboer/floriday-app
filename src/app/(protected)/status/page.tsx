@@ -45,6 +45,7 @@ const KLEUREN: Record<Stoplicht, { stip: string; rand: string; vlak: string }> =
 // nog goed zijn - maar 24 uur stilte op een feed zonder volgnummer is precies het scenario
 // waar niemand het opvalt; dat verdient oranje, niet groen.
 const SESSIE_KLEUR: Record<SessieToestand, Stoplicht> = {
+  "niet-beschikbaar": "rood",
   "niet-gekoppeld": "rood",
   verlopen: "rood",
   verouderd: "oranje",
@@ -52,6 +53,7 @@ const SESSIE_KLEUR: Record<SessieToestand, Stoplicht> = {
 };
 
 const SESSIE_KOP: Record<SessieToestand, string> = {
+  "niet-beschikbaar": "Nog niet beschikbaar op deze omgeving",
   "niet-gekoppeld": "Nog niet gekoppeld",
   verlopen: "RFH-sessie verlopen",
   verouderd: "Geen recente vernieuwing",

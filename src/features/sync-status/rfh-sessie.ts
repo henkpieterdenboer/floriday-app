@@ -9,7 +9,7 @@
 
 import type { RfhSessie } from "@/features/rfh-preauction/client/session-store";
 
-export type SessieToestand = "niet-gekoppeld" | "verlopen" | "verouderd" | "goed";
+export type SessieToestand = "niet-beschikbaar" | "niet-gekoppeld" | "verlopen" | "verouderd" | "goed";
 
 export interface SessieOordeel {
   toestand: SessieToestand;
@@ -26,7 +26,20 @@ export interface SessieOordeel {
  */
 const VEROUDERD_NA_UREN = 24;
 
-export function beoordeelSessie(sessie: RfhSessie | null, nu: Date): SessieOordeel {
+export function beoordeelSessie(sessie: RfhSessie | null | undefined, nu: Date): SessieOordeel {
+  // undefined - niet null - staat voor "de RfhSession-tabel bestaat hier nog niet". Dat is
+  // geen ongekoppelde omgeving maar een omgeving die de schema-push nog moet krijgen; die
+  // twee lopen door elkaar heen als hier niet expliciet onderscheiden wordt (zie
+  // session-store.ts, leesSessie).
+  if (sessie === undefined) {
+    return {
+      toestand: "niet-beschikbaar",
+      bericht:
+        "RFH Pre-Auction is hier nog niet beschikbaar: de database mist de RfhSession-tabel. " +
+        "Draai `npm run db:push` voordat dit op deze omgeving uitgerold wordt.",
+    };
+  }
+
   if (!sessie) {
     return {
       toestand: "niet-gekoppeld",
