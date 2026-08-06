@@ -205,8 +205,13 @@ model ClockSupplyLineVersion {
   /// Geen sequenceNumber om op te ontdubbelen zoals SupplyLineVersion dat heeft; deze
   /// bron levert er geen. observedAt is per run constant, dus dit voorkomt dat dezelfde
   /// run twee versies van dezelfde regel wegschrijft.
+  ///
+  /// Eén constraint, geen twee. SupplyLineVersion draagt naast zijn unique key ook een
+  /// losse index op [supplyLineId, observedAt], maar daar staat de unique op
+  /// sequenceNumber en zijn het dus verschillende kolommen. Hier zouden ze identiek zijn:
+  /// Postgres legt onder een unique al een B-tree aan, en het leftmost prefix bedient
+  /// "alle versies van deze regel" net zo goed. Een tweede index kost alleen schrijfwerk.
   @@unique([clockSupplyLineId, observedAt])
-  @@index([clockSupplyLineId, observedAt])
 }
 
 /// Eén rij. Draagt de refresh token voor RFH Pre-Auction.
