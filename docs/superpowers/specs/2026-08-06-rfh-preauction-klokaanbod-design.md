@@ -11,6 +11,24 @@ Het **volledige klokaanbod** binnenhalen en archiveren, naast het voorverkoopaan
 deelproject A al ophaalt. Bron is de JSON-API achter het RFH Pre-Auction-scherm, niet de
 Floriday-API — die ontsluit het klokaanbod voor kopers namelijk niet.
 
+**Alleen snijbloemen.** Vastgelegd op 6 augustus 2026. Kamerplanten en tuinplanten blijven
+buiten beschouwing — niet als latere uitbreiding, maar als scope-beperking die het werk
+kleiner maakt. Concreet: elk verzoek draagt
+`searchFilterItems: [{ filterItemType: "MainGroup", filterOptionKeys: ["1"] }]`, en alles wat
+binnenkomt heeft `mainGroupCode: "1"`.
+
+Gemeten gevolgen:
+
+| | Zonder scope | Alleen snijbloemen |
+|---|---|---|
+| Productie, veildag 07-08-2026 | 15.122 | **13.057 (86%)** |
+| Staging, veildag 07-08-2026 | 341 | **36** |
+| Staging, synthetische regels | 174 | **0** |
+
+Het volume daalt dus nauwelijks — snijbloemen zijn het overgrote deel van de klok — maar de
+sneden worden eenvoudiger en, onverwacht, de staging-ruis verdwijnt volledig: alle
+synthetische regels zitten in hoofdgroep 3, tuinplanten. Zie §3.2.
+
 **Binnen scope**
 
 - Een tweede ingest in `src/features/rfh-preauction/`, met eigen client, schema, sync en tabellen.
@@ -21,7 +39,9 @@ Floriday-API — die ontsluit het klokaanbod voor kopers namelijk niet.
 
 **Buiten scope**
 
-- Wijzigingen aan de Floriday-ingest. Die blijft ongemoeid draaien.
+- Kamerplanten en tuinplanten.
+- Wijzigingen aan de Floriday-ingest. Die blijft ongemoeid draaien, inclusief de
+  kamerplanten en tuinplanten die daar wél in zitten.
 - Bieden, markeren of orders plaatsen. Wij lezen.
 - Deelproject C, de distributie naar de interne informatievoorziening.
 
@@ -101,6 +121,24 @@ er **174 synthetisch**, herkenbaar aan een `reference` die met `synth_` begint. 
 Daarmee is ook vraag 3.6a beantwoord: er is een manier om staging-testdata te herkennen
 zonder naar productnamen te kijken.
 
+Die synthetische regels blijken **volledig in hoofdgroep 3 te zitten**, tuinplanten: 176 van
+de 179 regels daar waren nep, tegenover nul in snijbloemen en nul in kamerplanten. Binnen de
+scope van §1 is de staging-ruis daarmee geen probleem meer, en vervalt de noodzaak om er in
+tests op te filteren.
+
+### 3.2b Hoofdgroepen
+
+Gemeten, niet afgeleid:
+
+| `filterOptionKeys` | `mainGroupCode` | Groep | Staging 07-08 |
+|---|---|---|---|
+| `"1"` | `"1"` | (Snij)bloemen | 36 |
+| `"2"` | `"2"` | Kamerplanten | 126 |
+| `"3"` | `"3"` | Tuinplanten | 179, waarvan 176 synthetisch |
+
+De filtersleutel en de veldwaarde zijn dezelfde tekst. Het filter is exact: elk antwoord
+bevatte uitsluitend de gevraagde `mainGroupCode`.
+
 ### 3.3 De sleutel
 
 Van de 156 klokregels met een `clockPresalesSupplyLineId` op staging lossen er **156 op** in
@@ -151,6 +189,31 @@ Over ongeveer een half uur op staging: van 337 klokregels verdween er **één** 
 **drie** bij. Ids zijn dus stabiel genoeg om als primaire sleutel te dienen.
 
 `reference` is dat **niet**: 336 unieke waarden op 337 regels. Niet als sleutel gebruiken.
+
+### 3.7 De voorverkooplink lijkt vergankelijk
+
+Snijbloemen op staging, per veildag:
+
+| Veildag | Klokregels | Met `clockPresalesSupplyLineId` |
+|---|---|---|
+| 03-08-2026 | 399 | **0** |
+| 05-08-2026 | 313 | **0** |
+| 06-08-2026 | 369 | **0** |
+| 07-08-2026 (de volgende veildag) | 36 | **33** |
+
+Op veildagen die al geweest zijn draagt geen enkele klokregel een voorverkooplink; op de
+eerstvolgende veildag draagt vrijwel elke regel er een. Het patroon is te scherp om toeval
+te zijn.
+
+**Ontwerpregel: de koppeling moet worden vastgelegd terwijl zij leeft.** Wie een veildag pas
+achteraf ophaalt, krijgt de klokregels wel maar de verbinding met de voorverkoop niet. Zodra
+wij de link eenmaal hebben opgeslagen houden wij hem vast, ook als RFH hem later loslaat —
+`ClockSupplyLine.clockPresalesSupplyLineId` wordt bij een latere run **nooit op leeg
+overschreven**.
+
+Dit heeft twee gevolgen verderop: de eenmalige inhaalslag over de beschikbare maand (§6)
+levert klokregels zonder koppeling op, en §11.1 wordt tweezijdig in plaats van een
+enkelvoudige voorspelling.
 
 ---
 
@@ -203,15 +266,20 @@ lokale tijd om, de opslag doet dat niet.
 
 ## 6. Ophaalstrategie
 
-Per veildag pagineren, maar niet in één rechte lijn. De reeks wordt gesneden op
-**veildatum × hoofdgroep × veillocatie**. Op productie zijn dat drie hoofdgroepen en zes
-veillocaties, waardoor 15.000 regels uiteenvallen in sneden van hooguit enkele honderden.
+Per veildag pagineren, maar niet in één rechte lijn. Met de scope uit §1 ligt de hoofdgroep
+vast op `"1"`, dus de reeks wordt gesneden op **veildatum × veillocatie**. Zes veillocaties
+delen 13.000 snijbloemregels op in sneden van rond de tweeduizend.
 
 Twee redenen:
 
 - Zoek-API's kennen vaak een bovengrens op `skip` — Elasticsearch stopt standaard bij
-  10.000 en productie zit daarboven. Met sneden is die vraag niet meer relevant.
+  10.000, en zonder sneden zit productie daarboven. Met sneden is die vraag niet meer
+  relevant.
 - Een mislukte snede kost één snede, niet de hele veildag.
+
+Blijkt een snede alsnog te groot, dan is kwaliteitsklasse of prijsklasse de volgende as om
+op te snijden. Dat is pas nodig als een enkele veillocatie op één dag over de 10.000 komt,
+wat op de gemeten cijfers niet voorkomt.
 
 Welke dagen per run: **gisteren, vandaag en de twee volgende veildagen.** Gisteren om de
 eindstand vast te leggen, vooruit omdat het aanbod daar volloopt.
@@ -340,12 +408,18 @@ Geen van beide blokkeert de bouw.
 ### 11.1 Komen de onverkochte voorverkooppartijen alsnog op de klok?
 
 De 79 `UNAVAILABLE`-regels mét stuks uit §3.4 zouden er de volgende ochtend moeten staan.
-Staan ze er, dan is de klokbron over de tijd een superset van de voorverkoop en is `2.5` uit
-`vragen-voor-rfh.md` beantwoord. Staan ze er niet, dan klopt de documentatie van RFH niet en
-is dat op zichzelf een melding waard.
+Sinds §3.7 is dit een tweezijdige vraag, want er zijn nu twee uitkomsten die allebei iets
+betekenen:
+
+| Uitkomst | Betekenis |
+|---|---|
+| Ze verschijnen als klokregel, mét voorverkooplink | De documentatie klopt en de klokbron is over de tijd een superset. `2.5` beantwoord. |
+| Ze verschijnen als klokregel, zónder voorverkooplink | De partij gaat wel door, maar de koppeling wordt bij de overgang losgelaten. Dan is §3.7 bevestigd en is het vastleggen op het juiste moment kritiek. |
+| Ze verschijnen niet | De documentatie van RFH klopt niet. Melding waard, en een echte beperking van deze bron. |
 
 Meet dit vóór het ordervenster van de volgende veildag sluit, anders meet je opnieuw een
-overgang.
+overgang. Beperk de meting tot snijbloemen, conform §1 — de cijfers in §3.4 zijn nog over
+alle hoofdgroepen genomen en moeten binnen scope opnieuw worden vastgesteld.
 
 ### 11.2 Loopt `skip` op productie voorbij 10.000?
 
