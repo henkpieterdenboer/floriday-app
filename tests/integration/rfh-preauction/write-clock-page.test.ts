@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/db";
-import { writeClockPage } from "@/features/rfh-preauction/sync/write-clock-page";
+import { UPSERT_COLUMNS, writeClockPage } from "@/features/rfh-preauction/sync/write-clock-page";
 import type { ClockSupplyLineRow } from "@/features/rfh-preauction/mappers/clock-supply";
 
 /**
@@ -17,7 +17,9 @@ import type { ClockSupplyLineRow } from "@/features/rfh-preauction/mappers/clock
  * these two ids and never runs an unfiltered deleteMany.
  */
 const ID = "ffffffff-0000-4000-8000-00000000c10c";
+const ID_TWEE = "ffffffff-0000-4000-8000-00000000c10d";
 const PRESALE_ID = "ffffffff-0000-4000-8000-00000000b71d";
+const IDS = [ID, ID_TWEE];
 
 /**
  * A full row, copied from tests/unit/rfh-preauction/changed-lines.test.ts rather than shared
@@ -82,9 +84,38 @@ function rij(overschrijf: Partial<ClockSupplyLineRow> = {}): ClockSupplyLineRow 
   };
 }
 
+/**
+ * Dates and Decimals do not survive a database round trip as the same JavaScript value, so
+ * they are compared by value. Everything else is left alone: toEqual already compares arrays
+ * and objects structurally, and ignores key order - which matters, because jsonb hands the
+ * keys back in its own order rather than RFH's.
+ */
+function normaliseer(waarde: unknown): unknown {
+  if (waarde instanceof Date) return waarde.toISOString();
+  if (typeof waarde === "object" && waarde !== null && "toFixed" in waarde) {
+    return (waarde as { toFixed(cijfers: number): string }).toFixed(4);
+  }
+  return waarde;
+}
+
+/**
+ * Compares a stored row against the row that went in, column by column.
+ *
+ * The VALUES tuple in write-clock-page.ts is hand-written with a cast per column; a spot check
+ * of five columns would not notice two of them swapped. The column name is folded into the
+ * compared value so a failure says which one.
+ */
+function verwachtRondgang(opgeslagen: Record<string, unknown>, verwacht: ClockSupplyLineRow): void {
+  for (const kolom of UPSERT_COLUMNS) {
+    expect({ [kolom]: normaliseer(opgeslagen[kolom]) }).toEqual({
+      [kolom]: normaliseer((verwacht as unknown as Record<string, unknown>)[kolom]),
+    });
+  }
+}
+
 afterEach(async () => {
-  await prisma.clockSupplyLineVersion.deleteMany({ where: { clockSupplyLineId: ID } });
-  await prisma.clockSupplyLine.deleteMany({ where: { clockSupplyLineId: ID } });
+  await prisma.clockSupplyLineVersion.deleteMany({ where: { clockSupplyLineId: { in: IDS } } });
+  await prisma.clockSupplyLine.deleteMany({ where: { clockSupplyLineId: { in: IDS } } });
 });
 
 afterAll(async () => {
@@ -179,5 +210,62 @@ describe("writeClockPage", () => {
   it("collapses a duplicate id inside one page", async () => {
     const uit = await writeClockPage([rij(), rij()], new Date("2026-08-06T10:00:00.000Z"));
     expect(uit).toMatchObject({ rowsProcessed: 1, duplicatesCollapsed: 1 });
+  });
+
+  /**
+   * The reason writeClockPage is a batch function instead of a loop is Prisma.join over the
+   * VALUES tuples, and every other test in this file hands it a single line - the duplicate
+   * test included, since those two collapse into one. So without this test the multi-row path
+   * that carries every real page is never executed.
+   *
+   * Two lines that differ in as much as possible, compared column by column, so a VALUES
+   * expression landing in the wrong column shows up here rather than in the archive.
+   */
+  it("writes two different lines in one call", async () => {
+    const een = rij();
+    const twee = rij({
+      clockSupplyLineId: ID_TWEE,
+      reference: "synth_9100183551999",
+      clockPresalesSupplyLineId: null,
+      supplierName: "Zurel",
+      supplierCertificates: ["MPS A", "GLOBALG.A.P."],
+      name: "ROSA GR RED NAOMI",
+      characteristics: null,
+      positiveCharacteristics: [{ vbnCode: "S25", vbnValueCode: "003" }],
+      currentNumberOfPieces: 500,
+      preSalePriceValue: null,
+      preSalePriceCurrency: null,
+      auctionLocation: "Aalsmeer",
+      isAuctioned: true,
+      lastCommercialMutationMoment: null,
+      isSynthetic: true,
+    });
+
+    const uit = await writeClockPage([een, twee], new Date("2026-08-06T10:00:00.000Z"));
+
+    expect(uit).toEqual({ rowsProcessed: 2, versionsAdded: 2, duplicatesCollapsed: 0 });
+
+    const opgeslagen = await prisma.clockSupplyLine.findMany({
+      where: { clockSupplyLineId: { in: IDS } },
+    });
+    expect(opgeslagen).toHaveLength(2);
+
+    const perId = new Map(opgeslagen.map((regel) => [regel.clockSupplyLineId, regel]));
+    verwachtRondgang(perId.get(ID) as unknown as Record<string, unknown>, een);
+    verwachtRondgang(perId.get(ID_TWEE) as unknown as Record<string, unknown>, twee);
+  });
+
+  /**
+   * The column list, the VALUES tuple and the ON CONFLICT assignments used to be three blocks
+   * of text that had to agree by hand. Two of the three are now generated from UPSERT_COLUMNS,
+   * and this holds that list up against the row type: add a field to ClockSupplyLineRow, write
+   * it nowhere, and this fails instead of the value quietly never being stored.
+   *
+   * isSynthetic is the one deliberate exception - not a column, recomputed from reference on
+   * read (see the note on ClockSupplyLineRow.isSynthetic).
+   */
+  it("has a column for every field of a row", () => {
+    const velden = Object.keys(rij()).filter((veld) => veld !== "isSynthetic");
+    expect([...UPSERT_COLUMNS].sort()).toEqual(velden.sort());
   });
 });

@@ -61,24 +61,123 @@ function isSynthetisch(reference: string): boolean {
 }
 
 /**
+ * Every ClockSupplyLine column this writer fills from a row, in the order the VALUES tuple
+ * below lists them.
+ *
+ * A Record rather than an array so the compiler enforces completeness, the same reasoning as
+ * CONTENT_FIELD_SET in changed-lines.ts: add a field to ClockSupplyLineRow and this object
+ * stops compiling until someone decides which column it belongs in. Without that, a new field
+ * would simply never be written - no error, no failing test, and a gap in the archive that
+ * cannot be reconstructed afterwards.
+ *
+ * isSynthetic is deliberately absent: it is not a column, it is derived from reference on
+ * read (see the note on the field). firstSeenAt and lastSeenAt are absent because they are
+ * bookkeeping rather than row content; upsertSql appends them itself.
+ */
+const UPSERT_COLUMN_SET: Record<Exclude<keyof ClockSupplyLineRow, "isSynthetic">, true> = {
+  clockSupplyLineId: true,
+  reference: true,
+  auctionDate: true,
+  clockPresalesSupplyLineId: true,
+  supplierOrganizationId: true,
+  supplierName: true,
+  supplierRelationNumber: true,
+  supplierLogoUrl: true,
+  supplierCertificates: true,
+  productCode: true,
+  vbnProductName: true,
+  productName: true,
+  name: true,
+  characteristics: true,
+  positiveCharacteristics: true,
+  negativeCharacteristics: true,
+  qualityCode: true,
+  qualityIndexClassification: true,
+  mainGroupCode: true,
+  productGroupName: true,
+  potSizeInCm: true,
+  plantHeightInCm: true,
+  photoUrl: true,
+  topLevelMainColor: true,
+  rgbMainColor: true,
+  currentNumberOfPieces: true,
+  numberOfPackages: true,
+  piecesPerPackage: true,
+  packagesPerLayer: true,
+  layersPerLoadcarrier: true,
+  numberOfLoadCarriers: true,
+  numberOfPackagesPerLoadCarrier: true,
+  packageTypeCode: true,
+  packageTypeName: true,
+  loadCarrierCode: true,
+  sequenceOnLoadCarrier: true,
+  preSaleInitialNumberOfPieces: true,
+  preSaleCurrentNumberOfPieces: true,
+  preSalePriceValue: true,
+  preSalePriceCurrency: true,
+  auctionLocation: true,
+  clockShortName: true,
+  auctioningSequence: true,
+  isAuctioned: true,
+  digitalAuctionSupplyType: true,
+  deliveryFormBarcode: true,
+  lastCommercialMutationMoment: true,
+  isFromSyntheticRequest: true,
+};
+
+/** Exported so a test can hold this list up against ClockSupplyLineRow itself. */
+export const UPSERT_COLUMNS = Object.keys(UPSERT_COLUMN_SET);
+
+/**
+ * The column list and the ON CONFLICT assignments are both generated from UPSERT_COLUMNS, so
+ * the three parts of the statement cannot drift apart. Written out by hand they were three
+ * separate blocks of text that happened to agree; a column added to two of them and forgotten
+ * in the third compiles and runs, and only shows up as a value that is silently never stored.
+ *
+ * Prisma.raw is safe here precisely because these names come from a compile-time constant and
+ * never from data - it is the only way to put an identifier into a statement, since a bound
+ * parameter cannot be a column name.
+ */
+const KOLOMMEN = Prisma.raw(
+  [...UPSERT_COLUMNS, "firstSeenAt", "lastSeenAt"].map((kolom) => `"${kolom}"`).join(", "),
+);
+
+/**
+ * Three columns are deliberately not a plain EXCLUDED assignment.
+ *
+ * clockSupplyLineId is the conflict target; assigning it would be meaningless.
+ *
+ * firstSeenAt is absent altogether, so a re-observation never disturbs when we first saw the
+ * lot. lastSeenAt is always bumped to observedAt.
+ *
+ * clockPresalesSupplyLineId is the subtle one: COALESCE, so an incoming null can never erase
+ * a link we already hold. RFH drops the link once the auction day has passed (spec §3.7) -
+ * measured on staging, past auction days carry it on zero rows and the next auction day on
+ * 33 of 36 - and that link is the only bridge between this feed and the presale archive.
+ * Losing it to routine housekeeping would quietly destroy the thing this feature exists to
+ * provide. The integration test proves it: swap this line for a plain EXCLUDED assignment and
+ * "never overwrites a stored presale link with null" fails, alone.
+ */
+const TOEWIJZINGEN = Prisma.raw(
+  [
+    ...UPSERT_COLUMNS.filter(
+      (kolom) => kolom !== "clockSupplyLineId" && kolom !== "clockPresalesSupplyLineId",
+    ).map((kolom) => `"${kolom}" = EXCLUDED."${kolom}"`),
+    `"clockPresalesSupplyLineId" = COALESCE(EXCLUDED."clockPresalesSupplyLineId", "ClockSupplyLine"."clockPresalesSupplyLineId")`,
+    `"lastSeenAt" = EXCLUDED."lastSeenAt"`,
+  ].join(",\n      "),
+);
+
+/**
  * One multi-row INSERT ... ON CONFLICT for the whole slice, for the same reason the Floriday
  * writer does it (see write-supply-page.ts for the measurements): a per-row upsert loop
  * inside a transaction is an order of magnitude slower and does not fit inside the
- * transaction timeout at slice size.
+ * transaction timeout at page size.
  *
- * Two columns are deliberately absent from a plain EXCLUDED assignment.
- *
- * firstSeenAt is not updated at all, so a re-observation never disturbs when we first saw
- * the lot.
- *
- * clockPresalesSupplyLineId is written with COALESCE, which is the subtle one: an incoming
- * null can never erase a link we already hold. RFH drops the link once the auction day has
- * passed (spec §3.7) - measured on staging, past auction days carry it on zero rows and the
- * next auction day on 33 of 36 - and that link is the only bridge between this feed and the
- * presale archive. Losing it to routine housekeeping would quietly destroy the thing this
- * feature exists to provide.
- *
- * isSynthetic is absent because it is not a column; it is derived from reference on read.
+ * The VALUES tuple is the one part that stays hand-written, because every column needs its own
+ * cast. Its order must match UPSERT_COLUMNS. A mismatch in *count* is not a silent failure -
+ * Postgres refuses the statement outright ("INSERT has more expressions than target columns"),
+ * so every test goes red at once.
  */
 function upsertSql(rows: readonly ClockSupplyLineRow[], observedAt: Date): Prisma.Sql {
   const values = rows.map(
@@ -107,73 +206,10 @@ function upsertSql(rows: readonly ClockSupplyLineRow[], observedAt: Date): Prism
   );
 
   return Prisma.sql`
-    INSERT INTO "ClockSupplyLine" (
-      "clockSupplyLineId", "reference", "auctionDate", "clockPresalesSupplyLineId",
-      "supplierOrganizationId", "supplierName", "supplierRelationNumber", "supplierLogoUrl",
-      "supplierCertificates", "productCode", "vbnProductName", "productName", "name",
-      "characteristics", "positiveCharacteristics", "negativeCharacteristics",
-      "qualityCode", "qualityIndexClassification", "mainGroupCode", "productGroupName",
-      "potSizeInCm", "plantHeightInCm", "photoUrl", "topLevelMainColor", "rgbMainColor",
-      "currentNumberOfPieces", "numberOfPackages", "piecesPerPackage", "packagesPerLayer",
-      "layersPerLoadcarrier", "numberOfLoadCarriers", "numberOfPackagesPerLoadCarrier",
-      "packageTypeCode", "packageTypeName", "loadCarrierCode", "sequenceOnLoadCarrier",
-      "preSaleInitialNumberOfPieces", "preSaleCurrentNumberOfPieces", "preSalePriceValue",
-      "preSalePriceCurrency", "auctionLocation", "clockShortName", "auctioningSequence",
-      "isAuctioned", "digitalAuctionSupplyType", "deliveryFormBarcode",
-      "lastCommercialMutationMoment", "isFromSyntheticRequest", "firstSeenAt", "lastSeenAt"
-    )
+    INSERT INTO "ClockSupplyLine" (${KOLOMMEN})
     VALUES ${Prisma.join(values)}
     ON CONFLICT ("clockSupplyLineId") DO UPDATE SET
-      "reference" = EXCLUDED."reference",
-      "auctionDate" = EXCLUDED."auctionDate",
-      "clockPresalesSupplyLineId" = COALESCE(
-        EXCLUDED."clockPresalesSupplyLineId", "ClockSupplyLine"."clockPresalesSupplyLineId"
-      ),
-      "supplierOrganizationId" = EXCLUDED."supplierOrganizationId",
-      "supplierName" = EXCLUDED."supplierName",
-      "supplierRelationNumber" = EXCLUDED."supplierRelationNumber",
-      "supplierLogoUrl" = EXCLUDED."supplierLogoUrl",
-      "supplierCertificates" = EXCLUDED."supplierCertificates",
-      "productCode" = EXCLUDED."productCode",
-      "vbnProductName" = EXCLUDED."vbnProductName",
-      "productName" = EXCLUDED."productName",
-      "name" = EXCLUDED."name",
-      "characteristics" = EXCLUDED."characteristics",
-      "positiveCharacteristics" = EXCLUDED."positiveCharacteristics",
-      "negativeCharacteristics" = EXCLUDED."negativeCharacteristics",
-      "qualityCode" = EXCLUDED."qualityCode",
-      "qualityIndexClassification" = EXCLUDED."qualityIndexClassification",
-      "mainGroupCode" = EXCLUDED."mainGroupCode",
-      "productGroupName" = EXCLUDED."productGroupName",
-      "potSizeInCm" = EXCLUDED."potSizeInCm",
-      "plantHeightInCm" = EXCLUDED."plantHeightInCm",
-      "photoUrl" = EXCLUDED."photoUrl",
-      "topLevelMainColor" = EXCLUDED."topLevelMainColor",
-      "rgbMainColor" = EXCLUDED."rgbMainColor",
-      "currentNumberOfPieces" = EXCLUDED."currentNumberOfPieces",
-      "numberOfPackages" = EXCLUDED."numberOfPackages",
-      "piecesPerPackage" = EXCLUDED."piecesPerPackage",
-      "packagesPerLayer" = EXCLUDED."packagesPerLayer",
-      "layersPerLoadcarrier" = EXCLUDED."layersPerLoadcarrier",
-      "numberOfLoadCarriers" = EXCLUDED."numberOfLoadCarriers",
-      "numberOfPackagesPerLoadCarrier" = EXCLUDED."numberOfPackagesPerLoadCarrier",
-      "packageTypeCode" = EXCLUDED."packageTypeCode",
-      "packageTypeName" = EXCLUDED."packageTypeName",
-      "loadCarrierCode" = EXCLUDED."loadCarrierCode",
-      "sequenceOnLoadCarrier" = EXCLUDED."sequenceOnLoadCarrier",
-      "preSaleInitialNumberOfPieces" = EXCLUDED."preSaleInitialNumberOfPieces",
-      "preSaleCurrentNumberOfPieces" = EXCLUDED."preSaleCurrentNumberOfPieces",
-      "preSalePriceValue" = EXCLUDED."preSalePriceValue",
-      "preSalePriceCurrency" = EXCLUDED."preSalePriceCurrency",
-      "auctionLocation" = EXCLUDED."auctionLocation",
-      "clockShortName" = EXCLUDED."clockShortName",
-      "auctioningSequence" = EXCLUDED."auctioningSequence",
-      "isAuctioned" = EXCLUDED."isAuctioned",
-      "digitalAuctionSupplyType" = EXCLUDED."digitalAuctionSupplyType",
-      "deliveryFormBarcode" = EXCLUDED."deliveryFormBarcode",
-      "lastCommercialMutationMoment" = EXCLUDED."lastCommercialMutationMoment",
-      "isFromSyntheticRequest" = EXCLUDED."isFromSyntheticRequest",
-      "lastSeenAt" = EXCLUDED."lastSeenAt"
+      ${TOEWIJZINGEN}
   `;
 }
 
@@ -244,6 +280,10 @@ export async function writeClockPage(
         });
       }
     },
+    // Fifteen seconds, taken from the Floriday writer, where the bulk upsert was measured at
+    // roughly one second per 1000 rows against Neon in Frankfurt. A page from this feed holds
+    // at most 500 lines, so the budget is an order of magnitude more than the work needs -
+    // deliberately, since the cost of a timeout is a slice that never lands.
     { timeout: 15_000 },
   );
 
