@@ -6,6 +6,16 @@
  */
 const SCOPES = ["role:customer", "openid", "offline_access", "role:app", "profile"];
 
+/**
+ * `typeof value === "string"` is true for `""`, and Okta returning an empty
+ * access_token or refresh_token would otherwise be treated as valid - silently
+ * corrupting the stored session in the refresh_token case. The length check is what
+ * turns "technically a string" into "actually usable".
+ */
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 export interface RequestAccessTokenOptions {
   tokenUrl: string;
   clientId: string;
@@ -65,7 +75,9 @@ export async function requestAccessToken(
     );
   }
 
-  if (!response.ok || typeof payload.access_token !== "string") {
+  const accessToken = nonEmptyString(payload.access_token);
+
+  if (!response.ok || !accessToken) {
     // Never include the request body in this message: it carries the refresh token, and
     // this error ends up in RfhSession.lastError and on the status page. `payload` and
     // `text` are both derived from the response body, which cannot echo it back.
@@ -78,9 +90,8 @@ export async function requestAccessToken(
   }
 
   return {
-    accessToken: payload.access_token,
-    refreshToken:
-      typeof payload.refresh_token === "string" ? payload.refresh_token : refreshToken,
+    accessToken,
+    refreshToken: nonEmptyString(payload.refresh_token) ?? refreshToken,
     expiresInSeconds: typeof payload.expires_in === "number" ? payload.expires_in : 3600,
   };
 }
