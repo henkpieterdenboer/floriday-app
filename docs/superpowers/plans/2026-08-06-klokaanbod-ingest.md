@@ -288,8 +288,30 @@ describe("getRfhEnv", () => {
       RFH_PREAUCTION_CLIENT_ID: "0oa19yrfd96Maphyz0h8",
     });
   });
+
+  // Het realistische faalgeval is niet "alles leeg" maar "half overgenomen uit
+  // .env.example". Dan moet de melding zeggen wélk veld ontbreekt, anders sta je te
+  // zoeken. De Floriday-tests dekken dit al; deze twee trekken dat gelijk.
+  it("names the field that is missing", () => {
+    process.env.RFH_PREAUCTION_API_BASE_URL = "https://pre-auction-api.staging.rfh-auction.com/v16.0";
+    process.env.RFH_PREAUCTION_TOKEN_URL =
+      "https://idm.staging.floriday.io/oauth2/aus1w6civoyW4EdjE0h8/v1/token";
+    delete process.env.RFH_PREAUCTION_CLIENT_ID;
+
+    expect(() => getRfhEnv()).toThrow(/RFH_PREAUCTION_CLIENT_ID/);
+  });
+
+  it("says the rest of the application still works", () => {
+    delete process.env.RFH_PREAUCTION_CLIENT_ID;
+
+    expect(() => getRfhEnv()).toThrow(/rest van de applicatie werkt wel/);
+  });
 });
 ```
+
+Beide tests volgen de vorm die het bestand al voor `getFloridayEnv` gebruikt, inclusief het
+bewaren en terugzetten van `process.env`. Kijk hoe dat blok het doet en sluit erop aan in
+plaats van een eigen mechanisme te bedenken.
 
 Voeg `getRfhEnv` toe aan de bestaande import bovenaan het bestand.
 
@@ -356,12 +378,20 @@ Expected: PASS.
 Voeg onderaan `.env.example` toe:
 
 ```
-# RFH Pre-Auction - het volledige klokaanbod. Staging-waarden; op productie zijn dit
-# pre-auction-api.rfh-auction.com/v16.0 en idm.floriday.io/oauth2/ausbh16jzskq0dsN50i7.
+# RFH Pre-Auction - het volledige klokaanbod. Staging.
 RFH_PREAUCTION_API_BASE_URL=https://pre-auction-api.staging.rfh-auction.com/v16.0
 RFH_PREAUCTION_TOKEN_URL=https://idm.staging.floriday.io/oauth2/aus1w6civoyW4EdjE0h8/v1/token
 RFH_PREAUCTION_CLIENT_ID=0oa19yrfd96Maphyz0h8
+
+# RFH Pre-Auction production (not in use yet)
+# RFH_PREAUCTION_API_BASE_URL=https://pre-auction-api.rfh-auction.com/v16.0
+# RFH_PREAUCTION_TOKEN_URL=https://idm.floriday.io/oauth2/ausbh16jzskq0dsN50i7/v1/token
+# RFH_PREAUCTION_CLIENT_ID=0oa88yyomvXp9o3Fp0i7
 ```
+
+Volledig uitgeschreven en uitgecommentarieerd, niet als prozacomment. Het bestand doet dat
+voor Floriday al zo, en het scheelt dat iemand bij de overstap naar productie een pad als
+`/v1/token` uit zijn hoofd moet reconstrueren.
 
 - [ ] **Stap 6: Commit**
 
