@@ -737,6 +737,33 @@ describe("session-store", () => {
     await expect(vernieuwOnderSlot(async () => ({ nieuweRefreshToken: "x", waarde: 1 })))
       .rejects.toThrow(/nog niet gekoppeld/);
   });
+
+  // De vijf tests hierboven slagen allemaal even hard als je de regel met
+  // pg_advisory_xact_lock weghaalt. Voor een bestand waarvan het commentaar zegt dat het
+  // slot de reden van bestaan is, hoort er één test te staan die dat ook werkelijk vast-
+  // houdt. Controleer bij het schrijven dat hij faalt zonder die regel.
+  it("serialises two concurrent refreshes instead of letting them overlap", async () => {
+    await schrijfSessie("token-een");
+
+    const gebeurtenissen: string[] = [];
+
+    const loop = (naam: string, wacht: number) =>
+      vernieuwOnderSlot(async (huidige) => {
+        gebeurtenissen.push(`${naam}-start-${huidige}`);
+        await new Promise((klaar) => setTimeout(klaar, wacht));
+        gebeurtenissen.push(`${naam}-klaar`);
+        return { nieuweRefreshToken: `na-${naam}`, waarde: naam };
+      });
+
+    await Promise.all([loop("a", 300), loop("b", 0)]);
+
+    // Wie eerst is doet er niet toe; dat ze elkaar niet overlappen wel. Twee starts
+    // achter elkaar zonder tussenliggende "klaar" zou betekenen dat het slot niets doet.
+    const eerste = gebeurtenissen[0].slice(0, 1);
+    const tweede = eerste === "a" ? "b" : "a";
+    expect(gebeurtenissen[1]).toBe(`${eerste}-klaar`);
+    expect(gebeurtenissen[2]).toBe(`${tweede}-start-na-${eerste}`);
+  });
 });
 ```
 
@@ -800,8 +827,15 @@ export interface VernieuwResultaat<T> {
  * logs in again. The cron route already refuses to start overlapping runs, but that guard
  * lives one layer up and does not cover a script running alongside a cron.
  *
- * On failure the token is left exactly as it was and the reason is recorded, so the status
- * page can tell "never coupled" apart from "coupling expired".
+ * On failure the stored bytes are left as they were and the reason is recorded, so the
+ * status page can tell "never coupled" apart from "coupling expired".
+ *
+ * "As they were" is not the same as "still usable", and the difference is worth knowing.
+ * If Okta has already rotated and the transaction then fails to commit - a slow round
+ * trip against the timeout, a dropped connection - the row keeps a token that is dead on
+ * Okta's side. No design avoids that window entirely without a two-phase protocol; the
+ * lock and a generous timeout make it small. The recovery is the same as for any dead
+ * session: couple again.
  */
 export async function vernieuwOnderSlot<T>(
   werk: (huidigeRefreshToken: string) => Promise<VernieuwResultaat<T>>,
@@ -832,7 +866,11 @@ export async function vernieuwOnderSlot<T>(
 
         return uitkomst.waarde;
       },
-      { timeout: 20_000 },
+      // Ruim genomen. Dit budget dekt het wachten op het slot, de gang naar Okta én de
+      // commit; loopt het over, dan rolt Prisma terug terwijl Okta mogelijk al geroteerd
+      // heeft. De cron-route die dit aanroept staat op maxDuration 300, dus krap zetten
+      // levert niets op en vergroot alleen dat venster.
+      { timeout: 45_000 },
     );
   } catch (error: unknown) {
     // The note has to be written outside the transaction, and this is not a style choice.
