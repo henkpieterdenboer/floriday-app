@@ -62,6 +62,12 @@ export interface ClockSupplyLineRow {
    * Whether this is RFH's own staging test data. Derived from the reference prefix, not from
    * isFromSyntheticRequest: that flag was false on every record measured, including the 174
    * obviously synthetic ones (spec §3.2).
+   *
+   * Never stored. It exists on this row only so changed-lines.ts and the search screen have
+   * it to hand; ClockSupplyLine and ClockSupplyLineVersion carry no isSynthetic column and
+   * are not meant to. reference is stored, and reference.startsWith("synth_") recomputes
+   * this at read time, so a column here would just be a second copy of that same fact -
+   * one that could drift from it. Task 11's writer strips this field before every insert.
    */
   isSynthetic: boolean;
 }
