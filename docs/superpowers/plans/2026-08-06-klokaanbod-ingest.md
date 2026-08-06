@@ -3014,10 +3014,24 @@ export interface SyncSnedeOptions {
   pageSize?: number;
 }
 
+/**
+ * Waarom de wandeling stopte. `compleet` is hier puur een afgeleide van, zodat er niet twee
+ * waarheden naast elkaar staan.
+ *
+ * Het onderscheid is operationeel, niet cosmetisch. "korte-pagina" betekent dat de
+ * resultatenset onder ons vandaan schoof - vervelend, komt voor. "maxPaginas" betekent dat
+ * de server volle pagina's bleef leveren tegen een totaal dat hij nooit bereikte, en dat is
+ * een storing. Wie 's nachts kijkt moet dat verschil zien zonder de code te lezen.
+ */
+export type SnedeStopReden = "totaal-bereikt" | "korte-pagina" | "maxPaginas";
+
 export interface SyncSnedeResult {
   rowsProcessed: number;
   versionsAdded: number;
   totalDocuments: number;
+  /** Echte verzoeken aan de API, niet sneden. Telt op tot SyncRun.pagesProcessed. */
+  pagesFetched: number;
+  stopReden: SnedeStopReden;
   /**
    * Whether we saw as many rows as the server said there were. False means the slice was
    * cut short - a page came back shorter than asked for while the total was not yet reached.
@@ -3277,7 +3291,10 @@ export async function runClockSyncWith(
 
     await deps.finishRun(runId, {
       status: "SUCCEEDED",
-      pagesProcessed: sneden.length,
+      // Echte paginabezoeken, niet het aantal sneden. De statuspagina toont deze kolom
+      // naast die van de Floriday-sync, en daar telt hij ook pagina's - twee getallen onder
+      // hetzelfde kopje horen hetzelfde te meten.
+      pagesProcessed,
       rowsProcessed,
       versionsAdded,
       warning,
