@@ -17,6 +17,7 @@
     "db:push": "node scripts/db-push.mjs",
     "db:push:dry": "node scripts/db-push.mjs --dry-run",
     "invite": "tsx scripts/invite.ts",
+    "rfh-koppel": "tsx scripts/rfh-koppel.ts",
     "export-aanbod": "tsx scripts/export-aanbod.ts",
     "delta": "tsx scripts/delta-sync.ts",
     "toon-afgekeurd": "tsx scripts/toon-afgekeurde-records.ts",
