@@ -50,8 +50,18 @@ export interface VernieuwResultaat<T> {
  * logs in again. The cron route already refuses to start overlapping runs, but that guard
  * lives one layer up and does not cover a script running alongside a cron.
  *
- * On failure the token is left exactly as it was and the reason is recorded, so the status
- * page can tell "never coupled" apart from "coupling expired".
+ * On failure the stored row is left byte-for-byte as it was and the reason is recorded, so
+ * the status page can tell "never coupled" apart from "coupling expired".
+ *
+ * That is not the same as a guarantee that the session survives, and the difference matters.
+ * Okta rotates the moment it answers, but our side only becomes true at COMMIT. Anything
+ * that kills the transaction in between - the timeout below, a dropped WebSocket, a crashed
+ * process - leaves the database holding a token that has already been spent on the other
+ * side, and the next run finds a session it cannot rescue. Rolling back protects the token
+ * from being overwritten with a wrong value; nothing can protect it from having been
+ * rotated. Only a two-phase protocol with Okta could close that window, and Okta does not
+ * offer one. So the window is kept short instead: the timeout is generous rather than tight,
+ * because a transaction that is aborted for being slow lands in exactly this hole.
  */
 export async function vernieuwOnderSlot<T>(
   werk: (huidigeRefreshToken: string) => Promise<VernieuwResultaat<T>>,
@@ -82,7 +92,12 @@ export async function vernieuwOnderSlot<T>(
 
         return uitkomst.waarde;
       },
-      { timeout: 20_000 },
+      // Ruim bemeten, en met opzet. Deze transactie houdt het slot vast terwijl de gang naar
+      // Okta loopt, dus een krappe limiet koopt niets: een tweede aanroeper wacht toch al.
+      // Wat een krappe limiet wél doet is de transactie afbreken op precies het moment dat
+      // Okta al geroteerd heeft maar wij nog niet gecommit hebben - zie de docstring. De
+      // cron-route eromheen krijgt maxDuration = 300, dus 45 seconden past daar ruim binnen.
+      { timeout: 45_000 },
     );
   } catch (error: unknown) {
     // The note has to be written outside the transaction, and this is not a style choice.
