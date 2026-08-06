@@ -1,6 +1,6 @@
 # Wat er nog openstaat
 
-Bijgewerkt: 2 augustus 2026.
+Bijgewerkt: 7 augustus 2026.
 
 Gesorteerd op wat het meest in de weg zit. Streep af wat klaar is.
 
@@ -29,7 +29,36 @@ en verandert dat wat dit systeem kan beloven.
 
 ---
 
-## 2. Productie in gebruik nemen
+## 2. Het klokaanbod (RFH Pre-Auction) naar productie
+
+De ingest zelf staat: getest, gekoppeld op staging, en heeft via de inhaalslag 540+ echte
+klokregels weggeschreven. Wat nog moet gebeuren staat los van bouwen — het is een mensenstap
+en een meting.
+
+- [ ] **Op productie koppelen.** Vereist een mens die inlogt op
+      `https://pre-auction.royalfloraholland.com` in een **privévenster** en de refresh token
+      overneemt uit `localStorage` — zie de kop van `scripts/rfh-koppel.ts` voor de precieze
+      stappen. Dit kan niet door een agent gedaan worden: de token is maar één keer zichtbaar
+      en aan een browsersessie gebonden. Daarna:
+      `npm run rfh-koppel -- --env .env.lokaal-productie --token <token>`.
+- [ ] **De cron staat al klaar, maar doet nog niets.** `/api/cron/klok` staat in `vercel.json`
+      op elke 5 minuten en draait al mee in elke productiedeploy — maar zonder een gekoppelde
+      `RfhSession` faalt elke run met een leesbare fout (`SyncRun.status = FAILED`,
+      `errorMessage` verwijst naar `rfh-koppel`). Geen stille dataverliezen, wel een wachtende
+      taak die niets doet tot de koppeling er is.
+- [ ] **De meting uit spec §11.1 afmaken.** Zie
+      `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §11.1. Al
+      gemeten: de voorverkooplink wordt losgelaten zodra een veildag voorbij is (nul van 540 op
+      al voorbije dagen), en blijft grotendeels staan op de eerstvolgende veildag (33 van 36 op
+      7 augustus). Nog niet gemeten: of de `UNAVAILABLE`-regels mét stuks die de voorverkoop
+      verlaten zonder verkocht te zijn, de volgende ochtend daadwerkelijk als klokregel
+      terugkomen — mét of zonder voorverkooplink, of helemaal niet. Dat bepaalt welke van drie
+      uitkomsten in de spec-tabel klopt, en moet gemeten worden vlak vóór het ordervenster van
+      een veildag sluit, anders meet je een volgende overgang in plaats van deze.
+
+---
+
+## 3. Productie in gebruik nemen
 
 Pas te doen als de credentials binnen zijn. In deze volgorde:
 
@@ -45,7 +74,7 @@ Pas te doen als de credentials binnen zijn. In deze volgorde:
 
 ---
 
-## 3. Microsoft Entra
+## 4. Microsoft Entra
 
 - [ ] **De tenant-controle bouwen.** De spec schreef `profile.email_verified` voor, en dat
       veld bestaat niet in Entra — elke aanmelding zou nu weigeren. De juiste controle is dat
@@ -58,7 +87,7 @@ Niet te bouwen of te testen zonder een geconfigureerde tenant.
 
 ---
 
-## 4. E-mail voor productie
+## 5. E-mail voor productie
 
 - [ ] **Resend inrichten** en de `SMTP_*`-variabelen zetten. Zolang die ontbreken loopt alles
       via Ethereal: er wordt niets echt verstuurd, maar elke mail is via een preview-link te
@@ -67,7 +96,7 @@ Niet te bouwen of te testen zonder een geconfigureerde tenant.
 
 ---
 
-## 5. Aan het scherm, na gebruik
+## 6. Aan het scherm, na gebruik
 
 Deze wachten bewust op ervaring in plaats van op een beslissing nu.
 
@@ -87,7 +116,7 @@ Deze wachten bewust op ervaring in plaats van op een beslissing nu.
 
 ---
 
-## 6. Deelproject C — distributie
+## 7. Deelproject C — distributie
 
 - [ ] **Bepalen waar de data heen moet.** Dit is de enige echte open ontwerpvraag: een
       export, een mail, een koppeling met een bestaand systeem? Zonder dat antwoord valt er
@@ -95,7 +124,7 @@ Deze wachten bewust op ervaring in plaats van op een beslissing nu.
 
 ---
 
-## 7. Kleinere dingen
+## 8. Kleinere dingen
 
 - [ ] **`middleware.ts` hernoemen naar `proxy.ts`.** Next.js 16 noemt de oude naam
       verouderd. Werkt nog volledig; puur opruimen.

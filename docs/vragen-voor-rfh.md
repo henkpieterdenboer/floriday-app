@@ -111,6 +111,15 @@ Welke van de twee klopt, en welk deel van het werkelijke klokaanbod zien wij via
 > overzicht structureel onvolledig, en dat moeten wij intern weten voordat we dit "het
 > klokaanbod" noemen.
 
+> **Beantwoord op 6 augustus 2026, gemeten met een tweede koppeling.** Nee: niet elke
+> klokpartij komt door de voorverkoop. Wij lezen het volledige klokaanbod nu ook rechtstreeks
+> uit RFH Pre-Auction (`clock-supply-search`, hetzelfde endpoint dat het scherm gebruikt) en
+> vergelijken dat tegen onze eigen `SupplyLine`-archief. Op productie, veildag 7 augustus 2026,
+> had **3.136 van de 15.175 klokregels (20,7%) geen voorverkooplink**. Op staging was dat 9 van
+> de 165 (5,5%) — te dun om op te bouwen; het productiecijfer is de betekenisvolle meting, maar
+> is één momentopname van één dag. Details in
+> `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §3.2.
+
 **1.2** Aan de customers-kant bestaat `/auction/clock-supply/{supplyLineId}` alleen per
 individueel ID — er is geen lijst- of sync-endpoint. Aan de suppliers-kant bestaat die
 volledige sync wél. Voorziet de roadmap in een sync-endpoint op clock supply voor kopers?
@@ -135,6 +144,19 @@ Zo ja, wanneer?
 > **1.2a** Is er een route die wij over het hoofd zien, of is dit inderdaad niet beschikbaar
 > voor kopers? Als het laatste: staat het op de roadmap, en zou een omgekeerde verwijzing
 > (een `clockSupplyReference` op de voorverkoopregel) een lichtere tussenoplossing zijn?
+
+> **Aangescherpt op 6 augustus 2026.** De omgekeerde verwijzing die wij in 1.2a vroegen bestaat
+> al: `clock-supply-search`, het endpoint achter het RFH Pre-Auction-scherm, levert per
+> klokregel gewoon `clockPresalesSupplyLineId` mee. Wij lezen dat endpoint nu met een
+> persoonlijk gebruikerstoken, op dezelfde manier als de webapplicatie dat doet — niet met onze
+> API-sleutel, want daarmee komen wij er niet in. Zie
+> `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §2 voor hoe en
+> waarom.
+>
+> De vraag is daarmee niet meer "bouw een sync-endpoint voor kopers", maar: **kunnen jullie
+> ons officiële, ondersteunde toegang geven tot wat er al bestaat en al aan de webapplicatie
+> geleverd wordt** — via een koper-API-sleutel in plaats van een gebruikerssessie die bij elk
+> gebruik roteert en die wij nu handmatig moeten vernieuwen?
 
 **1.3** De documentatie beschrijft het endpoint als *"clock presales supply lines from all
 the suppliers in your network"*. Wij hebben **nul connecties** staan en krijgen toch
@@ -234,6 +256,18 @@ zichtbaar?
 > (`QUEUED_FOR_AUCTION`, `IN_AUCTION`, `AUCTION_COMPLETED`, `NOT_AUCTIONED`,
 > `RETOUR_SUPPLIER`, ...) en die zijn voor ons allemaal onbereikbaar.
 
+> **Deels gemeten op 6-7 augustus 2026, met de nieuwe RFH Pre-Auction-koppeling.** Zie
+> `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §3.7 en §11.1. Op
+> drie veildagen die al voorbij waren, droeg **geen enkele** klokregel nog een
+> `clockPresalesSupplyLineId` (nul op 540 regels). Op de eerstvolgende veildag droeg vrijwel
+> elke regel er nog wel een (33 van 36, snijbloemen, 7 augustus). De koppeling wordt dus
+> zichtbaar **losgelaten** zodra de veildag voorbij is — dat bevestigt dat het onverkochte deel
+> wel degelijk als klokregel doorschuift, maar de link naar de voorverkoop niet blijft staan.
+>
+> Nog niet gemeten: of de 79 `UNAVAILABLE`-regels mét stuks uit 2.2 werkelijk als klokregel
+> verschijnen. Dat vraagt een meting vlak vóór het ordervenster van de eerstvolgende veildag
+> sluit, en die meting staat nog open (zie `docs/openstaand.md`).
+
 **2.6** Bij het bekijken van de 231 mutaties uit 2.2 viel iets op: **vrijwel geen enkele
 gemuteerde regel had een afleverbon.**
 
@@ -306,6 +340,15 @@ vertekening aan onze kant.
 **3.6a** Klopt het dat dit bewust klaargezette testdata is, en is er een manier om die te
 herkennen anders dan aan de productnaam? Een vlag of een aparte kweker-id zou ons helpen
 om staging-resultaten te beoordelen.
+
+> **Voor de klok-staging beantwoord op 6 augustus 2026, uit eigen meting.** Dit gaat over de
+> voorverkoop hierboven, maar dezelfde vraag speelde bij het toevoegen van de tweede bron via
+> RFH Pre-Auction, en daar is hij wél opgelost: aan het `synth_`-voorvoegsel in `reference`.
+> `isFromSyntheticRequest` staat bij alle gemeten regels op `false` en is dus **niet** de
+> marker. Zie
+> `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §3.2. Of hetzelfde
+> voorvoegsel ook in de voorverkoopdata hierboven geldt, is niet apart gemeten — dat blijft
+> deze vraag.
 
 **3.6b** Belangrijker: hierdoor blijven er zo'n **344 regels** over die op echt aanbod
 lijken, verdeeld over een handvol kwekers. Dat is te weinig om onze aannames over

@@ -4,9 +4,12 @@ Haalt het klokvoorverkoop-aanbod uit Floriday op en legt het met volledige versi
 vast in een Neon-database, zodat het doorzoekbaar wordt op assen die de API zelf niet
 ondersteunt: veildatum, veillocatie, kweker en artikel.
 
-**Wat hier ligt is het voorverkoopaanbod, niet het volledige klokaanbod.** Zie
-`docs/superpowers/specs/2026-07-31-floriday-ingest-database-design.md`, paragraaf 2 — dat
-onderscheid is belangrijk voor wat je intern belooft.
+**De Floriday-koppeling hierboven levert het voorverkoopaanbod, niet het volledige
+klokaanbod** — zie `docs/superpowers/specs/2026-07-31-floriday-ingest-database-design.md`,
+paragraaf 2. Er is inmiddels een tweede, zelfstandige bron die dat gat dicht: het volledige
+klokaanbod via RFH Pre-Auction. Zie "Het volledige klokaanbod (tweede bron)" hieronder. De
+koppeling daarvoor is op dit moment alleen op staging gelegd; op productie moet een mens dat
+nog met de hand doen, zie `docs/openstaand.md`.
 
 ## Aan de slag
 
@@ -34,6 +37,10 @@ npm test
 | `npm run db:push` | Past `prisma/schema.prisma` toe. Zie de waarschuwing hieronder. |
 | `npm run db:push:dry` | Toont de DDL zonder die uit te voeren. |
 | `npm run capture-fixtures` | Vernieuwt de testinvoer in `tests/fixtures/`. |
+| `npm run rfh-koppel -- --token <refresh-token>` | Koppelt (eenmalig) een RFH-refresh token, uit een privévenster gehaald. Zie "Het volledige klokaanbod" hieronder. |
+| `npm run rfh-koppel -- --status` | Toont of er gekoppeld is, wanneer de sessie voor het laatst ververst is en de laatste fout. |
+| `npm run backfill-klok -- --vanaf 2026-07-10 --tot 2026-08-05` | Inhaalslag voor het klokaanbod over een periode van veildagen. Niet hervatbaar zoals `backfill` — draait per dag opnieuw een `SyncRun`. |
+| `npm run rfh-typeproef -- --dagen 20260806,20260807` | Meet de werkelijke veldtypen van `clock-supply-search` tegen staging, om het Zod-schema te toetsen. |
 
 ### Tegen welke database draait dit?
 
@@ -79,13 +86,48 @@ Drie bronnen, elk met een eigen ritme:
 
 | Bron | Methode | Frequentie |
 |---|---|---|
-| Klokaanbod | `clock-presales-supply/sync` | elk uur, `/api/cron/sync` |
+| Voorverkoopaanbod | `clock-presales-supply/sync` | elk uur, `/api/cron/sync` |
 | Organisaties | `organizations/sync` | dagelijks 04:30 UTC, `/api/cron/organizations` |
 | Artikelen | `GET /trade-items?tradeItemIds=` per 100 | na elke aanbodslag, alleen ontbrekende |
 
 Artikelen hebben geen bruikbare sync: `/trade-items/sync` geeft `403 There are no
 connected suppliers`. Ophalen per ID werkt wel, en welke ontbreken wordt uit de database
 afgeleid, niet uit wat een run toevallig in het geheugen had.
+
+### Het volledige klokaanbod (tweede bron)
+
+Wat hierboven staat is het **voorverkoopaanbod** uit Floriday. Dat is niet hetzelfde als het
+klokaanbod: gemeten op productie had 20,7% van het klokaanbod op een gewone veildag geen
+voorverkooplink — die partijen zijn voor de Floriday-route onzichtbaar. Zie
+`docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §3.2.
+
+Daarom is er een tweede, zelfstandige ingest in `src/features/rfh-preauction/`, opgebouwd
+naar hetzelfde patroon als hierboven (client, schema, mapper, wijzigingsdetectie,
+versiearchief, `SyncRun`), maar tegen een andere bron: niet de Floriday-API, maar de JSON-API
+achter het RFH Pre-Auction-scherm zelf (`clock-supply-search`). Twee verschillen bepalen het
+ontwerp:
+
+- **Geen volgnummerreeks.** De sync loopt over sneden van veildatum × veillocatie in plaats
+  van over een cursor, en er is geen bewijs van volledigheid zoals `max-sequence-number` dat
+  aan de Floriday-kant geeft.
+- **Andere authenticatie.** Dit spreekt hetzelfde verzoek na dat de webapplicatie zelf doet,
+  met een persoonlijk gebruikerstoken in plaats van onze API-sleutel — een bewuste keuze van
+  de opdrachtgever, met impliciete toestemming van de RFH-contactpersoon. Zie de spec, §2,
+  voor de volledige toelichting en de afweging.
+
+**De koppeling is handmatig en verloopt.** De refresh token achter die sessie is maar één
+keer zichtbaar, in de browser, en rouleert bij elk gebruik. Koppelen doe je met
+`npm run rfh-koppel -- --token <token>` (zie de kop van `scripts/rfh-koppel.ts` voor hoe je
+aan zo'n token komt). Raakt de sessie kwijt of verlopen, dan moet een mens opnieuw inloggen
+in een privévenster — er is geen manier om dat vanuit code te herstellen. **Draai
+`rfh-koppel` daarom nooit lichtzinnig met een echte token: een bestaande koppeling
+overschrijven kost de oude sessie.**
+
+De klokregels worden gekoppeld aan de bestaande `SupplyLine` via
+`clockPresalesSupplyLineId`, zolang die koppeling nog leeft. RFH laat die verwijzing namelijk
+los zodra de veildag geweest is (nul van 540 gemeten op al voorbije veildagen) — vandaar dat
+de vijfminutensync (`/api/cron/klok`, zie `vercel.json`) belangrijker is dan de eenmalige
+inhaalslag: alleen de lopende sync vangt de koppeling terwijl zij nog bestaat.
 
 ## Het zoekscherm
 
@@ -173,5 +215,5 @@ De volledige inrichting, inclusief welke omgevingsvariabele waar hoort en welk
 | `docs/inventarisatie.md` | Hoe de koppeling met Floriday tot stand kwam |
 | `docs/voortgang.md` | Wat er is gebouwd en wat er onderweg misging |
 | `docs/concept-mail-arjan.md` | Conceptmail, wacht op twee gegevens |
-| `docs/superpowers/specs/` | De twee ontwerpen |
-| `docs/superpowers/plans/` | De drie implementatieplannen |
+| `docs/superpowers/specs/` | De drie ontwerpen |
+| `docs/superpowers/plans/` | De vier implementatieplannen |

@@ -1,6 +1,6 @@
 # Wat er gebouwd is
 
-Bijgewerkt: 2 augustus 2026.
+Bijgewerkt: 7 augustus 2026.
 
 Dit document is de inventaris: wat er staat, waar het staat, en waarom het zo werkt.
 Voor gebruik zie `README.md`; voor de omgevingen `docs/omgevingen.md`.
@@ -28,14 +28,17 @@ doorgaf. Dit vervangt die route.
 | Tests | 315, verdeeld over 37 bestanden |
 | Commits | 68 op `develop` |
 
-**Belangrijke beperking:** wat we ophalen is het **voorverkoopaanbod**, niet het volledige
-klokaanbod. De API-documentatie noemt het "een percentage van de potentiële klokvoorraad",
-uitsluitend via FloraMondo. Intern mag dus niet beloofd worden dat dit hét klokaanbod is.
-De vraag ligt bij Royal FloraHolland; zie `docs/vragen-voor-rfh.md`.
+**Belangrijke beperking, deels opgelost:** wat de Floriday-koppeling ophaalt is het
+**voorverkoopaanbod**, niet het volledige klokaanbod. Gemeten op productie: 20,7% van het
+klokaanbod heeft geen voorverkooplink en blijft voor die route dus onzichtbaar (spec
+`2026-08-06-rfh-preauction-klokaanbod-design.md`, §3.2). Er ligt inmiddels een tweede,
+zelfstandige bron die het volledige klokaanbod wél binnenhaalt — zie laag 4 hieronder. Die
+koppeling staat alleen op staging; op productie moet een mens hem nog met de hand leggen
+(`docs/openstaand.md`).
 
 ---
 
-## De drie lagen
+## De vier lagen
 
 ### 1. Ophalen en archiveren
 
@@ -85,12 +88,43 @@ vijftig rijen tegelijk.
 De hele filterstand staat in de URL. Daarmee is een selectie deelbaar, werkt de terugknop,
 en kan doorklikken vanuit de samenvatting de filters behouden.
 
+### 4. Klokaanbod (tweede bron)
+
+`src/features/rfh-preauction/`
+
+Een tweede, zelfstandige ingest, opgebouwd naar hetzelfde patroon als laag 1 — client,
+Zod-schema, mapper, wijzigingsdetectie, versiearchief, `SyncRun` — maar tegen een andere
+bron: niet de Floriday-API, maar de JSON-API achter het RFH Pre-Auction-scherm zelf
+(`clock-supply-search`). Zie `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`.
+
+Twee verschillen bepalen het ontwerp:
+
+- **Sneden in plaats van een cursor.** Er is geen volgnummerreeks, dus de sync loopt over
+  veildatum × veillocatie. Daarmee is er ook geen bewijs van volledigheid zoals de
+  `max-sequence-number` aan de Floriday-kant dat geeft.
+- **Een roulerende gebruikerssessie in plaats van client credentials.** Dit spreekt hetzelfde
+  verzoek na dat de webapplicatie zelf doet, met een persoonlijk gebruikerstoken. De refresh
+  token erachter rouleert bij elk gebruik en staat daarom in `RfhSession` in de database, niet
+  in een omgevingsvariabele — een cronrun kan geen env-var terugschrijven. Het koppelen zelf
+  (`npm run rfh-koppel`) is en blijft een handmatige stap: de token is maar één keer zichtbaar,
+  in een browser, en er is geen manier om een verlopen sessie vanuit code te herstellen.
+
+De koppeling met de bestaande voorverkoop loopt via `clockPresalesSupplyLineId`, en die is
+vergankelijk: RFH laat de verwijzing los zodra de veildag geweest is (nul van 540 gemeten op
+al voorbije veildagen). Vandaar dat de vijfminutensync (`/api/cron/klok`) belangrijker is dan
+de eenmalige inhaalslag (`npm run backfill-klok`) — alleen de lopende sync vangt de koppeling
+terwijl zij nog leeft. Eenmaal opgeslagen blijft de koppeling staan, ook als RFH hem later
+loslaat.
+
+Scope: uitsluitend snijbloemen, vastgelegd in het ontwerp — kamerplanten en tuinplanten
+blijven buiten beschouwing.
+
 ---
 
 ## Wat waar staat
 
 ```
-prisma/schema.prisma          8 tabellen, 5 enums
+prisma/schema.prisma          11 tabellen, 5 enums
 prisma/applied.prisma         wat er is toegepast — niet met de hand aanpassen
 
 src/lib/                      env-validatie, Prisma-client, mail, load-env
@@ -99,28 +133,33 @@ src/middleware.ts             beschermt /aanbod en /beheer
 src/features/floriday/        ophalen en archiveren (24 bestanden)
 src/features/auth/            toegang (12 bestanden)
 src/features/supply-search/   zoeken, pure logica (9 bestanden)
+src/features/rfh-preauction/  klokaanbod, tweede bron (13 bestanden)
 
 src/app/(public)/             login, uitnodiging
 src/app/(protected)/          aanbod, gebruikersbeheer
-src/app/api/cron/             twee cron-routes
+src/app/api/cron/             drie cron-routes
 src/app/api/auth/             NextAuth
 
-scripts/                      backfill, create-admin, invite, db-push, fixtures
-tests/                        315 tests: unit (zonder netwerk) en integration (tegen Neon)
+scripts/                      backfill, backfill-klok, create-admin, invite, db-push,
+                               fixtures, rfh-koppel, rfh-typeproef
+tests/                        494 tests: unit (zonder netwerk) en integration (tegen Neon)
 ```
 
-## De acht tabellen
+## De elf tabellen
 
 | Tabel | Waarvoor |
 |---|---|
-| `SupplyLine` | Actuele stand van elke aanbodregel |
+| `SupplyLine` | Actuele stand van elke voorverkoop-aanbodregel |
 | `SupplyLineVersion` | Append-only archief: elke inhoudelijke wijziging |
 | `TradeItem` | Artikelen, voor de productnaam |
 | `Organization` | Kwekers, voor de naam |
 | `SyncState` | Laatst verwerkte sequencenummer per bron |
-| `SyncRun` | Uitvoeringslog: wat draaide wanneer, met welke uitkomst |
+| `SyncRun` | Uitvoeringslog: wat draaide wanneer, met welke uitkomst — voor beide bronnen |
 | `User` | Toegang, met rol en actief-vlag |
 | `Invitation` | Uitnodigingen, alleen de hash van het token |
+| `ClockSupplyLine` | Actuele stand van elke klokregel (RFH Pre-Auction) |
+| `ClockSupplyLineVersion` | Append-only archief van de klokregels |
+| `RfhSession` | Eén rij, draagt de roulerende refresh token voor RFH Pre-Auction |
 
 ---
 
@@ -128,17 +167,23 @@ tests/                        315 tests: unit (zonder netwerk) en integration (t
 
 | Wat | Wanneer | Waar |
 |---|---|---|
-| Klokaanbod bijwerken | elk uur, 5 over | `/api/cron/sync` |
+| Voorverkoopaanbod bijwerken | elk uur, 5 over | `/api/cron/sync` |
+| Klokaanbod bijwerken (RFH Pre-Auction) | elke 5 minuten | `/api/cron/klok` |
 | Organisaties bijwerken | dagelijks 04:30 UTC | `/api/cron/organizations` |
-| Volledige inhaalslag | met de hand | `npm run backfill` |
+| Volledige inhaalslag, voorverkoop | met de hand | `npm run backfill` |
+| Inhaalslag klokaanbod, over de beschikbare maand | met de hand, eenmalig | `npm run backfill-klok` |
 
-Beide cron-routes zitten achter `CRON_SECRET`. De uurlijkse run is begrensd op twintig
+Alle drie de cron-routes zitten achter `CRON_SECRET`. De uurlijkse run is begrensd op twintig
 pagina's, wat ongeveer dertig seconden kost van de driehonderd die Vercel toestaat. Loopt
 hij achter, dan haalt de volgende run het in — de cursor bepaalt waar hervat wordt, niet
 de klok.
 
 **Vercel Cron draait alleen op productie.** Preview-deployments krijgen geen cron-taken, dus
 de testdatabase bevriest tenzij daar met de hand een backfill draait.
+
+`/api/cron/klok` staat wel al in `vercel.json`, maar heeft op productie nog niets te doen:
+zonder een gekoppelde `RfhSession` faalt elke run met een leesbare fout in plaats van stil te
+blijven. De koppeling is een handmatige stap die nog moet gebeuren — zie `docs/openstaand.md`.
 
 ---
 
@@ -213,6 +258,12 @@ Vermoedelijk correcties in de feed.
 - **Entra**, tot de tenant-controle er is.
 - **Productiedata.** De productiedatabase heeft het schema maar is leeg; er zijn nog geen
   Floriday-productiecredentials.
+- **De RFH-koppeling op productie.** Staging is gekoppeld (`npm run rfh-koppel`) en heeft 540+
+  klokregels via de inhaalslag. Op productie moet een mens nog met een refresh token uit een
+  privévenster koppelen — zie `docs/openstaand.md`.
+- **Het zoekscherm voor het klokaanbod.** De ingest levert een werkende, geteste bron; het
+  scherm zelf schakelen tussen voorverkoop en volledig klokaanbod krijgt een eigen plan zodra
+  er productiedata is om tegen te ontwerpen.
 
 ## Verder lezen
 
@@ -224,5 +275,5 @@ Vermoedelijk correcties in de feed.
 | `docs/inventarisatie.md` | Hoe de koppeling met Floriday tot stand kwam |
 | `docs/voortgang.md` | Wat er is gebouwd en wat er onderweg misging |
 | `docs/concept-mail-arjan.md` | Conceptmail, wacht op twee gegevens |
-| `docs/superpowers/specs/` | De twee ontwerpen |
-| `docs/superpowers/plans/` | De drie implementatieplannen |
+| `docs/superpowers/specs/` | De drie ontwerpen |
+| `docs/superpowers/plans/` | De vier implementatieplannen |
