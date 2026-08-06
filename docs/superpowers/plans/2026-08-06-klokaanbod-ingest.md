@@ -784,46 +784,55 @@ export interface VernieuwResultaat<T> {
 export async function vernieuwOnderSlot<T>(
   werk: (huidigeRefreshToken: string) => Promise<VernieuwResultaat<T>>,
 ): Promise<T> {
-  return prisma.$transaction(
-    async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SLOT_SLEUTEL})`;
+  try {
+    return await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${SLOT_SLEUTEL})`;
 
-      const rij = await tx.rfhSession.findUnique({ where: { id: SESSIE_ID } });
-      if (!rij) {
-        throw new Error(
-          "RFH Pre-Auction is nog niet gekoppeld. Draai `npm run rfh-koppel` met een " +
-            "verse refresh token uit een privévenster.",
-        );
-      }
+        const rij = await tx.rfhSession.findUnique({ where: { id: SESSIE_ID } });
+        if (!rij) {
+          throw new Error(
+            "RFH Pre-Auction is nog niet gekoppeld. Draai `npm run rfh-koppel` met een " +
+              "verse refresh token uit een privévenster.",
+          );
+        }
 
-      let uitkomst: VernieuwResultaat<T>;
-      try {
-        uitkomst = await werk(rij.refreshToken);
-      } catch (error: unknown) {
-        const bericht = error instanceof Error ? error.message : String(error);
-        // Deliberately a separate write outside this transaction's rollback path would be
-        // lost, so record it here and rethrow: the transaction commits the note, the
-        // caller still sees the failure.
+        const uitkomst = await werk(rij.refreshToken);
+
         await tx.rfhSession.update({
           where: { id: SESSIE_ID },
-          data: { lastError: bericht },
+          data: {
+            refreshToken: uitkomst.nieuweRefreshToken,
+            lastRefreshedAt: new Date(),
+            lastError: null,
+          },
         });
-        throw error;
-      }
 
-      await tx.rfhSession.update({
+        return uitkomst.waarde;
+      },
+      { timeout: 20_000 },
+    );
+  } catch (error: unknown) {
+    // The note has to be written outside the transaction, and this is not a style choice.
+    // Throwing inside the callback rolls the transaction back, so a note written in there
+    // would vanish along with everything else - which is exactly what we want for the
+    // token (it must stay untouched on failure) and exactly what we do not want for the
+    // reason it failed. The rollback is the mechanism that protects the token; this catch
+    // is what survives it.
+    //
+    // Best effort: if the database itself is what broke, a failure to record the note must
+    // not replace the original, more informative error.
+    const bericht = error instanceof Error ? error.message : String(error);
+    try {
+      await prisma.rfhSession.updateMany({
         where: { id: SESSIE_ID },
-        data: {
-          refreshToken: uitkomst.nieuweRefreshToken,
-          lastRefreshedAt: new Date(),
-          lastError: null,
-        },
+        data: { lastError: bericht },
       });
-
-      return uitkomst.waarde;
-    },
-    { timeout: 20_000 },
-  );
+    } catch {
+      // niets - de oorspronkelijke fout is belangrijker
+    }
+    throw error;
+  }
 }
 ```
 
@@ -832,7 +841,11 @@ export async function vernieuwOnderSlot<T>(
 Run: `npx vitest run tests/integration/rfh-preauction/session-store.test.ts`
 Expected: PASS, vijf tests.
 
-Let op: als de vierde test faalt omdat `lastError` leeg is, komt dat doordat de `throw` de transactie terugdraait inclusief de notitie. Los dat dan op door de foutnotitie ná de transactie te schrijven met een aparte `prisma.rfhSession.update`, en pas de commentaarregel aan zodat hij klopt met wat er staat.
+De vierde test is de scherpste van de vijf en verdient aandacht bij het schrijven. Hij eist
+twee dingen tegelijk die uit elkaar getrokken moeten worden: de token blijft ongemoeid
+(dat regelt de rollback) én de reden staat genoteerd (dat overleeft de rollback juist
+niet). Vandaar dat de notitie buiten de transactie hoort. Zie de comment in de
+implementatie.
 
 - [ ] **Stap 5: Commit**
 
