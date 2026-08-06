@@ -1,10 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { beoordeelSync, beschrijfDuur, type Stoplicht } from "@/features/sync-status/health";
+import { beoordeelSessie, type SessieToestand } from "@/features/sync-status/rfh-sessie";
 import {
   haalArchiefTelling,
   haalCursors,
   haalFeedBovengrens,
+  haalLaatsteKlokRun,
   haalLaatsteRuns,
   haalLaatsteWijzigingen,
 } from "@/features/sync-status/queries";
@@ -15,6 +17,7 @@ import { VerversKnop } from "./ververs-knop";
 import { IntervalKeuze } from "./interval-keuze";
 import { leesInterval } from "@/features/sync-status/interval-store";
 import { auth } from "@/features/auth/auth-config";
+import { leesSessie } from "@/features/rfh-preauction/client/session-store";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "API-status - Floriday Middleware" };
@@ -35,6 +38,24 @@ const KLEUREN: Record<Stoplicht, { stip: string; rand: string; vlak: string }> =
     rand: "border-red-200 dark:border-red-900",
     vlak: "bg-red-50 dark:bg-red-950/40",
   },
+};
+
+// "verlopen" (mislukte poging) en "niet-gekoppeld" (nog nooit gekoppeld) leveren allebei
+// geen enkele nieuwe regel op, dus rood. "verouderd" heeft geen fout - de sessie kan zelf
+// nog goed zijn - maar 24 uur stilte op een feed zonder volgnummer is precies het scenario
+// waar niemand het opvalt; dat verdient oranje, niet groen.
+const SESSIE_KLEUR: Record<SessieToestand, Stoplicht> = {
+  "niet-gekoppeld": "rood",
+  verlopen: "rood",
+  verouderd: "oranje",
+  goed: "groen",
+};
+
+const SESSIE_KOP: Record<SessieToestand, string> = {
+  "niet-gekoppeld": "Nog niet gekoppeld",
+  verlopen: "RFH-sessie verlopen",
+  verouderd: "Geen recente vernieuwing",
+  goed: "RFH-sessie is in orde",
 };
 
 function tijdstip(date: Date): string {
@@ -79,12 +100,14 @@ function Kerncijfer({
 export default async function StatusPage() {
   const nu = new Date();
 
-  const [runs, wijzigingen, telling, cursors, feed] = await Promise.all([
+  const [runs, wijzigingen, telling, cursors, feed, klokRun, rfhSessie] = await Promise.all([
     haalLaatsteRuns(10),
     haalLaatsteWijzigingen(50),
     haalArchiefTelling(),
     haalCursors(),
     haalFeedBovengrens(),
+    haalLaatsteKlokRun(),
+    leesSessie(),
   ]);
 
   // Apart van de Promise.all hierboven: met auth() erbij verliest TypeScript het tuple-type
@@ -92,6 +115,9 @@ export default async function StatusPage() {
   const interval = await leesInterval();
   const session = await auth();
   const isAdmin = session?.user?.role === "ADMIN";
+
+  const sessieOordeel = beoordeelSessie(rfhSessie, nu);
+  const sessieKleur = KLEUREN[SESSIE_KLEUR[sessieOordeel.toestand]];
 
   const laatste = runs[0] ?? null;
   const laatsteGeslaagd = runs.find((r) => r.status === "SUCCEEDED") ?? null;
@@ -193,6 +219,83 @@ export default async function StatusPage() {
           }
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>RFH Pre-Auction — klokaanbod</CardTitle>
+          <CardDescription>
+            De tweede bron: het volledige klokaanbod snijbloemen, per veildag opgehaald omdat
+            deze feed geen volgnummer kent om &ldquo;bij zijn&rdquo; mee te bewijzen. Een gemiste
+            veildag is niet opnieuw op te halen, dus stilte hier is de belangrijkste storing om
+            op te merken.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div
+            className={cn(
+              "flex items-start gap-4 rounded-xl border p-4",
+              sessieKleur.rand,
+              sessieKleur.vlak,
+            )}
+          >
+            <span className="relative mt-1 flex h-3.5 w-3.5 shrink-0">
+              {sessieOordeel.toestand === "goed" ? (
+                <span
+                  className={cn(
+                    "absolute inline-flex h-full w-full animate-ping rounded-full opacity-60",
+                    sessieKleur.stip,
+                  )}
+                />
+              ) : null}
+              <span className={cn("relative inline-flex h-3.5 w-3.5 rounded-full", sessieKleur.stip)} />
+            </span>
+            <div className="min-w-0">
+              <div className="font-medium">{SESSIE_KOP[sessieOordeel.toestand]}</div>
+              <p className="mt-1 text-sm text-muted-foreground">{sessieOordeel.bericht}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Kerncijfer
+              label="Laatste synchronisatie"
+              waarde={klokRun?.finishedAt ? tijdstip(klokRun.finishedAt) : "—"}
+              onder={
+                klokRun?.finishedAt
+                  ? `${beschrijfDuur((nu.getTime() - klokRun.finishedAt.getTime()) / 60_000)} geleden`
+                  : "nog geen geslaagde run"
+              }
+            />
+            <Kerncijfer
+              label="Regels bijgewerkt"
+              waarde={klokRun ? formatInteger(klokRun.rowsProcessed) : "—"}
+              onder={
+                klokRun
+                  ? `${formatInteger(klokRun.versionsAdded)} nieuwe versies, ${klokRun.pagesProcessed} pagina's`
+                  : ""
+              }
+            />
+            <Kerncijfer
+              label="Uitkomst"
+              waarde={
+                klokRun === null
+                  ? "—"
+                  : klokRun.status === "SUCCEEDED"
+                    ? "geslaagd"
+                    : klokRun.status === "FAILED"
+                      ? "mislukt"
+                      : "loopt"
+              }
+            />
+          </div>
+
+          {klokRun?.errorMessage ? (
+            <p className="text-sm text-destructive">{klokRun.errorMessage}</p>
+          ) : null}
+          {klokRun?.warning ? (
+            <p className="text-xs text-muted-foreground">{klokRun.warning}</p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

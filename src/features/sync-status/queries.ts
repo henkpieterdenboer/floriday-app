@@ -1,6 +1,8 @@
+import type { SyncRun } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { SUPPLY_RESOURCE, ORGANIZATION_RESOURCE } from "@/features/floriday/sync/cursor";
 import { createCustomersClient } from "@/features/floriday/client";
+import { KLOK_RESOURCE } from "@/features/rfh-preauction/sync/run-clock-sync";
 
 export interface RunRegel {
   id: string;
@@ -39,13 +41,8 @@ export interface ArchiefTelling {
   nieuwsteVeildag: Date | null;
 }
 
-export async function haalLaatsteRuns(aantal = 10): Promise<RunRegel[]> {
-  const runs = await prisma.syncRun.findMany({
-    where: { resource: SUPPLY_RESOURCE },
-    orderBy: { startedAt: "desc" },
-    take: aantal,
-  });
-  return runs.map((r) => ({
+function naarRunRegel(r: SyncRun): RunRegel {
+  return {
     id: r.id.toString(),
     trigger: r.trigger,
     startedAt: r.startedAt,
@@ -56,7 +53,25 @@ export async function haalLaatsteRuns(aantal = 10): Promise<RunRegel[]> {
     versionsAdded: r.versionsAdded,
     errorMessage: r.errorMessage,
     warning: r.warning,
-  }));
+  };
+}
+
+export async function haalLaatsteRuns(aantal = 10): Promise<RunRegel[]> {
+  const runs = await prisma.syncRun.findMany({
+    where: { resource: SUPPLY_RESOURCE },
+    orderBy: { startedAt: "desc" },
+    take: aantal,
+  });
+  return runs.map(naarRunRegel);
+}
+
+/** The most recent SyncRun for the RFH clock supply feed, or null if it never ran. */
+export async function haalLaatsteKlokRun(): Promise<RunRegel | null> {
+  const run = await prisma.syncRun.findFirst({
+    where: { resource: KLOK_RESOURCE },
+    orderBy: { startedAt: "desc" },
+  });
+  return run ? naarRunRegel(run) : null;
 }
 
 /**
