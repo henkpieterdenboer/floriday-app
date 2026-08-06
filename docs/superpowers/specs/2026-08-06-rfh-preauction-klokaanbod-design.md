@@ -239,11 +239,20 @@ Op veildagen die al geweest zijn draagt geen enkele klokregel een voorverkooplin
 eerstvolgende veildag draagt vrijwel elke regel er een. Het patroon is te scherp om toeval
 te zijn.
 
+**Bevestigd op 6 augustus 2026, met de gebouwde ingest.** De inhaalslag haalde de veildagen
+4 en 5 augustus op — allebei al voorbij — en schreef 540 klokregels weg. Daarvan droeg er
+**geen enkele** een `clockPresalesSupplyLineId`. Niet "grotendeels zonder", maar nul op 540.
+
 **Ontwerpregel: de koppeling moet worden vastgelegd terwijl zij leeft.** Wie een veildag pas
 achteraf ophaalt, krijgt de klokregels wel maar de verbinding met de voorverkoop niet. Zodra
 wij de link eenmaal hebben opgeslagen houden wij hem vast, ook als RFH hem later loslaat —
 `ClockSupplyLine.clockPresalesSupplyLineId` wordt bij een latere run **nooit op leeg
 overschreven**.
+
+Daarmee is de vijfminutensync belangrijker dan de inhaalslag: de inhaalslag levert volume,
+maar alleen de lopende sync levert de koppeling. Elke veildag die voorbijgaat zonder dat wij
+draaiden, is een dag waarvan we het klokaanbod later nog wel kunnen ophalen maar nooit meer
+aan de voorverkoop kunnen knopen.
 
 Dit heeft twee gevolgen verderop: de eenmalige inhaalslag over de beschikbare maand (§6)
 levert klokregels zonder koppeling op, en §11.1 wordt tweezijdig in plaats van een
