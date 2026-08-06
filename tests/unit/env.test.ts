@@ -147,6 +147,34 @@ describe("getRfhEnv", () => {
     expect(() => getRfhEnv()).toThrow(/RFH Pre-Auction is niet volledig geconfigureerd/);
   });
 
+  it("weigert een ontbrekende client id en noemt het veld", () => {
+    process.env = {
+      ...origineel,
+      RFH_PREAUCTION_API_BASE_URL: "https://pre-auction-api.staging.rfh-auction.com/v16.0",
+      RFH_PREAUCTION_TOKEN_URL:
+        "https://idm.staging.floriday.io/oauth2/aus1w6civoyW4EdjE0h8/v1/token",
+      RFH_PREAUCTION_CLIENT_ID: "0oa19yrfd96Maphyz0h8",
+    };
+    delete process.env.RFH_PREAUCTION_CLIENT_ID;
+
+    expect(() => getRfhEnv()).toThrow(/RFH_PREAUCTION_CLIENT_ID/);
+  });
+
+  // De melding moet duidelijk maken dat alleen het klokaanbod stilligt, niet de hele
+  // applicatie - anders gaat iemand zoeken naar een storing die er niet is.
+  it("zegt erbij dat de rest van de applicatie wel werkt", () => {
+    process.env = {
+      ...origineel,
+      RFH_PREAUCTION_API_BASE_URL: "https://pre-auction-api.staging.rfh-auction.com/v16.0",
+      RFH_PREAUCTION_TOKEN_URL:
+        "https://idm.staging.floriday.io/oauth2/aus1w6civoyW4EdjE0h8/v1/token",
+      RFH_PREAUCTION_CLIENT_ID: "0oa19yrfd96Maphyz0h8",
+    };
+    delete process.env.RFH_PREAUCTION_CLIENT_ID;
+
+    expect(() => getRfhEnv()).toThrow(/rest van de applicatie werkt wel/);
+  });
+
   it("returns the three values when they are all present", () => {
     process.env = {
       ...origineel,
