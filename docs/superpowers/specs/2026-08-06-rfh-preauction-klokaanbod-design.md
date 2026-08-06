@@ -190,6 +190,40 @@ Over ongeveer een half uur op staging: van 337 klokregels verdween er **één** 
 
 `reference` is dat **niet**: 336 unieke waarden op 337 regels. Niet als sleutel gebruiken.
 
+### 3.6b Filters en sneden
+
+`searchFilterItems` neemt items van de vorm
+`{ filterItemType, filterOptionKeys: [...] }`. De beschikbare types, uit het antwoord:
+
+`MainGroup`, `ProductGroup`, `Product`, `Supplier`, `Package`, `PotSize`,
+`FlowerStemLength`, `Weight`, `Quality`, `Certificates`, `Presale`, `Clock`, `PlantHeight`,
+`CountryOfOrigin`, `MainColor`, `AuctionLocation`, `MaturityStage`,
+`MinimumBranchesPerPlant`, `AuctionGroup`, `MinimumBundleWeight`, `MinimumFlowerDiameter`,
+`CultivationMethod`.
+
+`AuctionLocation` accepteert sleutels in **hoofdletters**, dezelfde waarden als onze
+bestaande `AuctionLocation`-enum. Alle zeven worden geaccepteerd; ongebruikte geven `0` in
+plaats van een fout. Gemeten op staging, snijbloemen, veildag 06-08-2026:
+
+| Sleutel | Regels |
+|---|---|
+| `AALSMEER` | 46 |
+| `NAALDWIJK` | 234 |
+| `RIJNSBURG` | 89 |
+| `EELDE`, `PLANTION`, `RHEINMAAS`, `DIGITAL` | 0 |
+| **Som** | **369** — gelijk aan het ongesneden totaal |
+
+De sneden sluiten dus exact, zonder overlap en zonder gat.
+
+Twee vormen die niet mogen worden verward: de **filtersleutel** is `NAALDWIJK`, het **veld
+in de record** heet `auctionLocation` en bevat `Naaldwijk`. Waargenomen veldwaarden:
+`Aalsmeer`, `Naaldwijk`, `Rijnsburg`.
+
+**De facetlijst `filterItems` in het antwoord is niet volledig** en mag niet gebruikt worden
+om de sneden te ontdekken. Bij de meting hierboven noemde hij alleen `NAALDWIJK`, terwijl er
+aantoonbaar drie locaties in de gegevens zaten. De lijst locaties hoort dus vast in de code,
+niet afgeleid uit het antwoord.
+
 ### 3.7 De voorverkooplink lijkt vergankelijk
 
 Snijbloemen op staging, per veildag:
