@@ -2342,6 +2342,12 @@ const CONTENT_FIELDS = Object.keys(CONTENT_FIELD_SET) as ContentField[];
  */
 function canoniek(waarde: unknown): unknown {
   if (Array.isArray(waarde)) return waarde.map(canoniek);
+  // Object.entries on a Date returns nothing, so without this a Date nested in an array
+  // would canonicalise to {} and two different dates would compare equal. Unreachable
+  // today - everything that reaches this branch came out of parsed JSON, from RFH's
+  // response body or from a jsonb column - but the types say `unknown` and nothing else
+  // records that assumption.
+  if (waarde instanceof Date) return waarde.getTime();
   if (waarde !== null && typeof waarde === "object") {
     return Object.fromEntries(
       Object.entries(waarde as Record<string, unknown>)
