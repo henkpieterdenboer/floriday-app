@@ -1816,7 +1816,13 @@ import { z } from "zod";
 export const clockSupplyLineSchema = z.object({
   id: z.string().uuid(),
   reference: z.string(),
-  clockPresalesSupplyLineId: z.string().uuid().nullish(),
+  // Gemeten op 6 augustus 2026: één record van 1117 droeg hier "" in plaats van niets.
+  // Zonder deze voorbewerking valt de hele snede op dat ene record. Ontbrekend als lege
+  // string is bekend gedrag aan de Floriday-kant; blijkbaar ook hier.
+  clockPresalesSupplyLineId: z.preprocess(
+    (waarde) => (waarde === "" ? undefined : waarde),
+    z.string().uuid().nullish(),
+  ),
 
   organization: z.object({
     id: z.string().uuid(),
@@ -1853,7 +1859,8 @@ export const clockSupplyLineSchema = z.object({
   packageTypeCode: z.union([z.string(), z.number()]).nullish(),
   packageTypeName: z.string().nullish(),
   loadCarrierCode: z.string().nullish(),
-  sequenceOnLoadCarrier: z.number().int().nullish(),
+  // Ook een string in de praktijk; zie auctioningSequence hieronder.
+  sequenceOnLoadCarrier: z.union([z.string(), z.number()]).nullish(),
 
   preSaleInitialNumberOfPieces: z.number().int().nullish(),
   preSaleCurrentNumberOfPieces: z.number().int().nullish(),
@@ -1862,7 +1869,11 @@ export const clockSupplyLineSchema = z.object({
 
   auctionLocation: z.string(),
   clockShortName: z.string().nullish(),
-  auctioningSequence: z.number().int().nullish(),
+  // String, niet getal - gemeten op vrijwel alle 1117 records van de typeproef. Het ene
+  // handmatig bekeken voorbeeldrecord had hier toevallig een echt getal, dus beide vormen
+  // komen voor. Zelfde behandeling als productCode en packageTypeCode: de mapper maakt er
+  // een number van, want de kolom is Int.
+  auctioningSequence: z.union([z.string(), z.number()]).nullish(),
   isAuctioned: z.boolean().nullish(),
   digitalAuctionSupplyType: z.string().nullish(),
   deliveryFormBarcode: z.string().nullish(),
