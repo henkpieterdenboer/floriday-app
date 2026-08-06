@@ -482,6 +482,48 @@ describe("requestAccessToken", () => {
     await expect(belofte).rejects.toThrow(/invalid_grant.*invalid or expired/s);
     await expect(belofte).rejects.not.toThrow(/oude-token/);
   });
+
+  it("refuses an empty access token instead of passing it on", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ access_token: "", expires_in: 3600 }), { status: 200 }),
+    );
+
+    await expect(requestAccessToken({ ...OPTIES, fetchImpl })).rejects.toThrow(/200/);
+  });
+
+  it("keeps the old refresh token when the server sends an empty one", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ access_token: "a", refresh_token: "", expires_in: 3600 }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await requestAccessToken({ ...OPTIES, fetchImpl });
+
+    expect(result.refreshToken).toBe("oude-token");
+  });
+
+  it("reports a 200 that carries no access token at all", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ token_type: "Bearer" }), { status: 200 }),
+    );
+
+    // Er is geen OAuth-foutcode in dit antwoord, dus de status neemt die plaats in.
+    await expect(requestAccessToken({ ...OPTIES, fetchImpl })).rejects.toThrow(/200/);
+  });
+
+  it("quotes the response body when it is not json at all", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response("<html><body>Gateway Timeout</body></html>", { status: 504 }),
+    );
+
+    // Dit is de tak waarop de beveiligingsbelofte rust: geciteerd wordt het antwoord,
+    // nooit het verzoek. Een test houdt dat vast, een reviewconclusie niet.
+    await expect(requestAccessToken({ ...OPTIES, fetchImpl })).rejects.toThrow(
+      /invalid json.*Gateway Timeout/s,
+    );
+  });
 });
 ```
 
@@ -500,6 +542,18 @@ Expected: FAIL, module niet gevonden.
  * app does - and the app is our only documentation for this API.
  */
 const SCOPES = ["role:customer", "openid", "offline_access", "role:app", "profile"];
+
+/**
+ * A length check, not just a type check.
+ *
+ * `""` is a string, so `typeof x === "string"` would wave an empty refresh token through
+ * and the caller would store it. Okta rotates on every use and cannot re-mint from code,
+ * so a stored empty token means the session is gone until a human logs in through a
+ * browser. That is too expensive an outcome to leave to a type check.
+ */
+function nietLeegOfNull(waarde: unknown): string | null {
+  return typeof waarde === "string" && waarde.length > 0 ? waarde : null;
+}
 
 export interface RequestAccessTokenOptions {
   tokenUrl: string;
@@ -556,7 +610,9 @@ export async function requestAccessToken(
     );
   }
 
-  if (!response.ok || typeof payload.access_token !== "string") {
+  const accessToken = nietLeegOfNull(payload.access_token);
+
+  if (!response.ok || accessToken === null) {
     // Never include the request body in this message: it carries the refresh token, and
     // this error ends up in RfhSession.lastError and on the status page.
     const error = typeof payload.error === "string" ? payload.error : String(response.status);
@@ -566,9 +622,8 @@ export async function requestAccessToken(
   }
 
   return {
-    accessToken: payload.access_token,
-    refreshToken:
-      typeof payload.refresh_token === "string" ? payload.refresh_token : refreshToken,
+    accessToken,
+    refreshToken: nietLeegOfNull(payload.refresh_token) ?? refreshToken,
     expiresInSeconds:
       typeof payload.expires_in === "number" ? payload.expires_in : 3600,
   };
