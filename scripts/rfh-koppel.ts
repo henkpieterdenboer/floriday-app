@@ -27,8 +27,9 @@
  */
 import "@/lib/load-env";
 import { prisma } from "@/lib/db";
+import { getRfhEnv } from "@/lib/env";
 import { leesSessie, schrijfSessie } from "@/features/rfh-preauction/client/session-store";
-import { createProductieTokenProvider } from "@/features/rfh-preauction/client/token-provider";
+import { requestAccessToken } from "@/features/rfh-preauction/client/token-request";
 
 function readFlag(name: string): string | undefined {
   const index = process.argv.indexOf(`--${name}`);
@@ -59,13 +60,36 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await schrijfSessie(token);
-  console.log("Token opgeslagen. Even proberen of hij werkt...");
+  console.log("Token wordt ingewisseld...");
 
-  // Dit direct bewijzen is het hele punt van het script. Een token die pas om 03:00 tijdens
-  // een cronrun blijkt niet te werken, kost een veildag - en deze feed kan dat niet inhalen.
-  const provider = createProductieTokenProvider();
-  await provider.getToken();
+  // Eerst inwisselen, dan pas opslaan - en de geroteerde token opslaan, niet de token die is
+  // meegegeven. Dit direct bewijzen is het hele punt van het script: een token die pas om
+  // 03:00 tijdens een cronrun blijkt niet te werken, kost een veildag, en deze feed kan dat
+  // niet inhalen. Was de volgorde omgekeerd, dan liet een mislukte ruil een dode token achter
+  // in RfhSession - niets om met de hand op te ruimen, geen bewijs dat er ooit een geldige
+  // koppeling is geweest, en --status zou dan "koppeling verlopen" melden in plaats van "nog
+  // nooit gekoppeld". En de meegegeven token is na deze aanroep sowieso dood: Okta roteert
+  // op elk gebruik, dus opslaan wat je meekreeg zou hoe dan ook de verkeerde token bewaren.
+  //
+  // vernieuwOnderSlot wordt hier bewust overgeslagen: die verwacht een bestaande rij om
+  // onder een slot te lezen, en die is er bij de allereerste koppeling nog niet. Er is
+  // hoogstens één schrijver mogelijk - een mens die dit script draait - dus het slot voegt
+  // hier niets toe.
+  const env = getRfhEnv();
+  const resultaat = await requestAccessToken({
+    tokenUrl: env.RFH_PREAUCTION_TOKEN_URL,
+    clientId: env.RFH_PREAUCTION_CLIENT_ID,
+    refreshToken: token,
+  });
+
+  await schrijfSessie(resultaat.refreshToken);
+  // schrijfSessie zet alleen refreshToken en lastError. Deze regel legt vast dat de zojuist
+  // bewezen rotatie ook echt heeft plaatsgevonden, zodat --status meteen "laatst ververst"
+  // toont in plaats van "nog nooit" onder een melding die net het tegendeel zei.
+  await prisma.rfhSession.update({
+    where: { id: "default" }, // RfhSession.id's vaste waarde; zie prisma/schema.prisma.
+    data: { lastRefreshedAt: new Date() },
+  });
 
   console.log("Gelukt. De sessie is gekoppeld en de eerste rotatie is opgeslagen.");
   await toonStatus();
@@ -74,6 +98,11 @@ async function main(): Promise<void> {
 main()
   .catch((error: unknown) => {
     console.error(`\nMislukt: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(1);
+    // process.exitCode, not process.exit(1): a forced exit here races the handles that the
+    // fetch to Okta leaves behind and crashes the process outright on Windows (a libuv
+    // assertion, "UV_HANDLE_CLOSING") instead of exiting cleanly with the message above still
+    // on screen. Setting the code and letting main's promise chain drain lets Node close
+    // those handles in the normal order.
+    process.exitCode = 1;
   })
   .finally(() => prisma.$disconnect());
