@@ -61,7 +61,17 @@ export async function runClockSyncWith(
 
   let rowsProcessed = 0;
   let versionsAdded = 0;
+  // Real API pages fetched across every slice, not the number of slices walked. A slice of
+  // 2000 rows at 500 per page is four real requests; SyncRun.pagesProcessed has to count the
+  // same thing the Floriday sync counts under that column, or the status page shows two
+  // numbers that look comparable but measure different things (spec review, task 14/17).
+  let pagesProcessed = 0;
   const onvolledigeSneden: Snede[] = [];
+  // Per-slice text for the warning, e.g. "20260806/NAALDWIJK (korte-pagina)". compleet=false
+  // covers two different diagnoses - a shifting result set versus a server that never reaches
+  // its own total - and a reader looking at this at 3am needs to see which one it is, not just
+  // that something was incomplete.
+  const onvolledigheidsredenen: string[] = [];
 
   try {
     for (const snede of sneden) {
@@ -80,7 +90,13 @@ export async function runClockSyncWith(
         });
       rowsProcessed += uit.rowsProcessed;
       versionsAdded += uit.versionsAdded;
-      if (!uit.compleet) onvolledigeSneden.push(snede);
+      pagesProcessed += uit.pagesFetched;
+      if (!uit.compleet) {
+        onvolledigeSneden.push(snede);
+        onvolledigheidsredenen.push(
+          `${snede.auctionDate}/${snede.auctionLocationKey} (${uit.stopReden})`,
+        );
+      }
 
       options.onProgress?.(
         `${snede.auctionDate} ${snede.auctionLocationKey}: ` +
@@ -89,15 +105,13 @@ export async function runClockSyncWith(
     }
 
     const warning =
-      onvolledigeSneden.length > 0
-        ? `Onvolledig opgehaald: ${onvolledigeSneden
-            .map((s) => `${s.auctionDate}/${s.auctionLocationKey}`)
-            .join(", ")}`
+      onvolledigheidsredenen.length > 0
+        ? `Onvolledig opgehaald: ${onvolledigheidsredenen.join(", ")}`
         : undefined;
 
     await deps.finishRun(runId, {
       status: "SUCCEEDED",
-      pagesProcessed: sneden.length,
+      pagesProcessed,
       rowsProcessed,
       versionsAdded,
       warning,

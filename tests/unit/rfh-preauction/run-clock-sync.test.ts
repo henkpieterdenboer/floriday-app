@@ -16,6 +16,8 @@ function fakeDeps(overrides: Partial<RunClockSyncDeps> = {}): RunClockSyncDeps {
       rowsProcessed: 10,
       versionsAdded: 2,
       totalDocuments: 10,
+      pagesFetched: 1,
+      stopReden: "totaal-bereikt" as const,
       compleet: true,
     })),
     startRun: vi.fn(async () => 1n),
@@ -31,6 +33,12 @@ describe("runClockSyncWith", () => {
       rowsProcessed: 10,
       versionsAdded: 2,
       totalDocuments: 10,
+      // Two real API pages per slice, so pagesProcessed on the finished run must come out at
+      // 56 (28 slices * 2), not 28 - that distinction is the point of this field: it has to
+      // count what SyncRun.pagesProcessed counts for the Floriday sync, real page fetches, not
+      // slices walked.
+      pagesFetched: 2,
+      stopReden: "totaal-bereikt" as const,
       compleet: true,
     }));
     const finishRun = vi.fn();
@@ -43,19 +51,31 @@ describe("runClockSyncWith", () => {
     expect(uit.rowsProcessed).toBe(280);
     expect(uit.versionsAdded).toBe(56);
     expect(uit.onvolledigeSneden).toEqual([]);
-    expect(finishRun).toHaveBeenCalledWith(1n, expect.objectContaining({ status: "SUCCEEDED" }));
+    expect(finishRun).toHaveBeenCalledWith(
+      1n,
+      expect.objectContaining({ status: "SUCCEEDED", pagesProcessed: 56 }),
+    );
   });
 
-  it("names the incomplete slices in the warning without failing the run", async () => {
+  it("names the incomplete slices and their stop reason in the warning without failing the run", async () => {
     const finishRun = vi.fn();
     const deps = fakeDeps({
       finishRun,
-      syncSnede: vi.fn(async ({ snede }: { snede: Snede }) => ({
-        rowsProcessed: 1,
-        versionsAdded: 0,
-        totalDocuments: snede.auctionLocationKey === "NAALDWIJK" ? 99 : 1,
-        compleet: snede.auctionLocationKey !== "NAALDWIJK",
-      })),
+      syncSnede: vi.fn(async ({ snede }: { snede: Snede }) => {
+        const naaldwijk = snede.auctionLocationKey === "NAALDWIJK";
+        return {
+          rowsProcessed: 1,
+          versionsAdded: 0,
+          totalDocuments: naaldwijk ? 99 : 1,
+          pagesFetched: 1,
+          // The two ways a slice can come back incomplete get different reasons, and the
+          // warning is only useful if a reader can tell them apart - see the type's doc
+          // comment in clock-supply.ts for why "korte-pagina" and "maxPaginas" are not the
+          // same diagnosis.
+          stopReden: naaldwijk ? ("maxPaginas" as const) : ("totaal-bereikt" as const),
+          compleet: !naaldwijk,
+        };
+      }),
     });
 
     const uit = await runClockSyncWith({ trigger: "CRON" }, deps);
@@ -64,6 +84,7 @@ describe("runClockSyncWith", () => {
     const outcome = finishRun.mock.calls[0][1];
     expect(outcome.status).toBe("SUCCEEDED");
     expect(outcome.warning).toMatch(/NAALDWIJK/);
+    expect(outcome.warning).toMatch(/maxPaginas/);
   });
 
   it("marks the run failed and rethrows when a slice throws", async () => {
@@ -92,7 +113,14 @@ describe("runClockSyncWith", () => {
       finishRun: vi.fn(),
       syncSnede: vi.fn(async ({ snede }: { snede: Snede }) => {
         if (snede.auctionLocationKey === "NAALDWIJK") throw origineel;
-        return { rowsProcessed: 0, versionsAdded: 0, totalDocuments: 0, compleet: true };
+        return {
+          rowsProcessed: 0,
+          versionsAdded: 0,
+          totalDocuments: 0,
+          pagesFetched: 1,
+          stopReden: "totaal-bereikt" as const,
+          compleet: true,
+        };
       }),
     });
 
@@ -100,5 +128,24 @@ describe("runClockSyncWith", () => {
       message: expect.stringMatching(/NAALDWIJK.*503/s),
       cause: origineel,
     });
+  });
+
+  // Small, per the review: the try/catch around finishRun in the failure path already behaves
+  // correctly (the original sync error is rethrown regardless), but nothing pinned that down.
+  // A later refactor of that block could silently let a finishRun failure replace the sync
+  // failure the caller actually needs to see. This locks in which one wins.
+  it("rethrows the original sync failure, not a finishRun failure that happens while recording it", async () => {
+    const finishRun = vi.fn(async () => {
+      throw new Error("database is down");
+    });
+    const deps = fakeDeps({
+      finishRun,
+      syncSnede: vi.fn(async () => {
+        throw new Error("RFH request failed: POST /clock-supply-search -> 503");
+      }),
+    });
+
+    await expect(runClockSyncWith({ trigger: "CRON" }, deps)).rejects.toThrow(/503/);
+    expect(finishRun).toHaveBeenCalledWith(1n, expect.objectContaining({ status: "FAILED" }));
   });
 });

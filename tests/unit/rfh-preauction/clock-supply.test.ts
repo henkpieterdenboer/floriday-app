@@ -62,6 +62,8 @@ describe("syncSnede", () => {
     expect(uit.rowsProcessed).toBe(2);
     expect(uit.versionsAdded).toBe(3); // 1 (first page) + 2 (second page)
     expect(uit.totalDocuments).toBe(2);
+    expect(uit.pagesFetched).toBe(2);
+    expect(uit.stopReden).toBe("totaal-bereikt");
     expect(uit.compleet).toBe(true);
 
     // skip advances by the page size on every call, and take stays fixed at pageSize.
@@ -88,6 +90,8 @@ describe("syncSnede", () => {
     });
 
     expect(uit.rowsProcessed).toBe(0);
+    expect(uit.pagesFetched).toBe(1);
+    expect(uit.stopReden).toBe("totaal-bereikt");
     expect(uit.compleet).toBe(true);
     expect(zoekKlokaanbod).toHaveBeenCalledTimes(1);
     expect(writePage).not.toHaveBeenCalled();
@@ -105,6 +109,7 @@ describe("syncSnede", () => {
     });
 
     expect(uit.compleet).toBe(false);
+    expect(uit.stopReden).toBe("korte-pagina");
     expect(uit.totalDocuments).toBe(5);
   });
 
@@ -129,6 +134,8 @@ describe("syncSnede", () => {
     expect(zoekKlokaanbod).toHaveBeenCalledTimes(2);
     expect(uit.rowsProcessed).toBe(2);
     expect(uit.totalDocuments).toBe(1);
+    expect(uit.pagesFetched).toBe(2);
+    expect(uit.stopReden).toBe("totaal-bereikt");
     expect(uit.compleet).toBe(true);
   });
 
@@ -155,6 +162,8 @@ describe("syncSnede", () => {
     expect(zoekKlokaanbod).toHaveBeenCalledTimes(3);
     expect(uit.rowsProcessed).toBe(3);
     expect(uit.totalDocuments).toBe(1000);
+    expect(uit.pagesFetched).toBe(3);
+    expect(uit.stopReden).toBe("maxPaginas");
     expect(uit.compleet).toBe(false);
   });
 });
