@@ -2820,13 +2820,29 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  await schrijfSessie(token);
-  console.log("Token opgeslagen. Even proberen of hij werkt...");
+  console.log("Even proberen of de token werkt...");
 
-  // Proving it now is the point of the script. A token that only turns out to be wrong at
+  // Exchange first, store second, and store what comes back rather than what was handed in.
+  //
+  // Proving it now is the point of the script: a token that only turns out to be wrong at
   // 03:00 during a cron run costs an auction day, and this feed has no way to catch up.
-  const provider = createProductieTokenProvider();
-  await provider.getToken();
+  //
+  // Storing only on success matters too. Write first and a bad token leaves a dead row
+  // behind, and the status page then reports "coupling expired" for an environment that
+  // was never coupled at all - two different problems that need to stay apart.
+  //
+  // The token handed in is already spent the moment Okta answers, so what gets stored is
+  // the rotated one. This is also the one place where bypassing vernieuwOnderSlot is
+  // right: there is no row to read under a lock yet, and there is exactly one writer - a
+  // human running this script.
+  const env = getRfhEnv();
+  const resultaat = await requestAccessToken({
+    tokenUrl: env.RFH_PREAUCTION_TOKEN_URL,
+    clientId: env.RFH_PREAUCTION_CLIENT_ID,
+    refreshToken: token,
+  });
+
+  await schrijfSessie(resultaat.refreshToken);
 
   console.log("Gelukt. De sessie is gekoppeld en de eerste rotatie is opgeslagen.");
   await toonStatus();
@@ -2965,6 +2981,19 @@ import type { ClockWriteResult } from "@/features/rfh-preauction/sync/write-cloc
  * around two thousand rows on production.
  */
 export const STANDAARD_PAGINAGROOTTE = 500;
+
+/**
+ * A backstop, not a budget. A real slice is a couple of thousand rows at most, so five
+ * pages is normal and fifty is already an order of magnitude of headroom.
+ *
+ * It exists because the loop's only other exit is agreement with `totalDocuments`. A server
+ * that keeps handing out full pages against a total it never reaches would spin until
+ * Vercel kills the function at 300 seconds - and then the run sits at RUNNING for ten
+ * minutes, blocking every retry, on a feed where a missed auction day does not come back.
+ * Hitting this bound is not a normal outcome, so it reports `compleet: false` rather than
+ * passing quietly.
+ */
+export const MAX_PAGINAS_PER_SNEDE = 50;
 
 export interface SyncSnedeOptions {
   client: PreauctionClient;
