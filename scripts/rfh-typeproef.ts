@@ -6,6 +6,16 @@
  * production, on a field nobody looked at. Run this before trusting it, and after every
  * version bump of the API.
  *
+ * Looks one level into plain nested objects - in practice just `organization` - and reports
+ * those fields dotted, e.g. `organization.relationNumber`. That is the same blind spot that
+ * let sequenceOnLoadCarrier and auctioningSequence sit in the schema as `number` for months
+ * while the API sent strings: nobody had measured past the top level.
+ *
+ * `characteristics`, `positiveCharacteristics` and `negativeCharacteristics` are arrays of
+ * objects and deliberately stay unexamined at `array<object>`, one level is not extended into
+ * them. They are stored as Json and only ever displayed (schemas/clock-supply.ts explains
+ * why), so their internal shape is not binding and is not worth the noise here.
+ *
  * Usage: npm run rfh-typeproef -- --dagen 20260806,20260807
  */
 import "../src/lib/load-env";
@@ -22,6 +32,37 @@ function typeVan(waarde: unknown): string {
     return `array<${binnen.join("|") || "leeg"}>`;
   }
   return typeof waarde;
+}
+
+function isPlainObject(waarde: unknown): waarde is Record<string, unknown> {
+  return typeof waarde === "object" && waarde !== null && !Array.isArray(waarde);
+}
+
+/**
+ * Records the type of one top-level field. A plain object - `organization` in practice - is
+ * expanded one level into `veld.subveld` entries instead of being recorded as `object`; an
+ * array stays whatever `typeVan` says, including `array<object>`, because arrays of objects
+ * are exactly the characteristics fields the module comment above excludes from this.
+ *
+ * `magUitbreiden` caps the expansion at one level, on purpose: a second `organization`-shaped
+ * field nested inside `organization` should show up as `organization.subveld: object`, not
+ * silently keep unfolding. Nothing observed goes that deep, but the cap is what makes "one
+ * level" a fact about this script rather than a hopeful description of the data.
+ */
+function verzamel(
+  gezien: Map<string, Set<string>>,
+  veld: string,
+  waarde: unknown,
+  magUitbreiden = true,
+): void {
+  if (magUitbreiden && isPlainObject(waarde)) {
+    for (const [subveld, subwaarde] of Object.entries(waarde)) {
+      verzamel(gezien, `${veld}.${subveld}`, subwaarde, false);
+    }
+    return;
+  }
+  if (!gezien.has(veld)) gezien.set(veld, new Set());
+  gezien.get(veld)!.add(typeVan(waarde));
 }
 
 async function main(): Promise<void> {
@@ -49,8 +90,7 @@ async function main(): Promise<void> {
       for (const record of pagina.results as Record<string, unknown>[]) {
         records++;
         for (const [veld, waarde] of Object.entries(record)) {
-          if (!gezien.has(veld)) gezien.set(veld, new Set());
-          gezien.get(veld)!.add(typeVan(waarde));
+          verzamel(gezien, veld, waarde);
         }
       }
       console.log(`${dag} ${locatie}: ${pagina.results.length} van ${pagina.totalDocuments}`);
