@@ -11,22 +11,17 @@ import type { ClockWriteResult } from "@/features/rfh-preauction/sync/write-cloc
 export const STANDAARD_PAGINAGROOTTE = 500;
 
 /**
- * How many pages one call to syncSnede fetches before giving up on the slice.
+ * A backstop, not a budget. A real slice is a couple of thousand rows at most, so five pages
+ * is normal and fifty is already an order of magnitude of headroom.
  *
- * The loop's other two exits both depend on the server behaving: totalDocuments being
- * reached, or a page coming back shorter than asked. A server that keeps handing out full
- * pages while totalDocuments stays forever out of reach - a bug on RFH's side, or a result
- * set growing faster than this slice can consume it - would otherwise spin without end. The
- * cron route that calls this has a 300-second budget; a run stuck here does not fail
- * cleanly, it sits on RUNNING and blocks every later attempt for as long as it hangs, which
- * is worse than failing outright for a feed where a missed auction day cannot be recovered.
- *
- * 50 pages at STANDAARD_PAGINAGROOTTE is 25,000 rows, against a slice that tops out around
- * two thousand on production - roughly a tenfold margin above anything a real snede needs.
- * Hitting it is never a normal outcome, so it is not thrown: the run keeps walking the other
- * slices and the gap surfaces through compleet, the same as any other cut-short slice.
+ * It exists because the loop's only other exit is agreement with `totalDocuments`. A server
+ * that keeps handing out full pages against a total it never reaches would spin until Vercel
+ * kills the function at 300 seconds - and then the run sits at RUNNING for ten minutes,
+ * blocking every retry, on a feed where a missed auction day does not come back. Hitting
+ * this bound is not a normal outcome, so it reports `compleet: false` rather than passing
+ * quietly.
  */
-export const STANDAARD_MAX_PAGINAS = 50;
+export const MAX_PAGINAS_PER_SNEDE = 50;
 
 export interface SyncSnedeOptions {
   client: PreauctionClient;
@@ -65,7 +60,7 @@ export async function syncSnede(options: SyncSnedeOptions): Promise<SyncSnedeRes
     writePage,
     now,
     pageSize = STANDAARD_PAGINAGROOTTE,
-    maxPages = STANDAARD_MAX_PAGINAS,
+    maxPages = MAX_PAGINAS_PER_SNEDE,
   } = options;
   const observedAt = now();
 
@@ -103,7 +98,7 @@ export async function syncSnede(options: SyncSnedeOptions): Promise<SyncSnedeRes
     // Either way there is nothing to gain from asking again with a higher skip.
     if (pagina.results.length < pageSize) break;
 
-    // Safety net, not a normal exit: see STANDAARD_MAX_PAGINAS. rowsProcessed is still below
+    // Safety net, not a normal exit: see MAX_PAGINAS_PER_SNEDE. rowsProcessed is still below
     // totalDocuments here, so compleet below comes out false on its own - no special case
     // needed for this branch.
     if (pageCount >= maxPages) break;
