@@ -131,4 +131,30 @@ describe("syncSnede", () => {
     expect(uit.totalDocuments).toBe(1);
     expect(uit.compleet).toBe(true);
   });
+
+  // Not one of the plan's three tests. Added after review flagged that a server which keeps
+  // handing out full pages while totalDocuments never comes within reach would otherwise
+  // spin forever - the cron route's 300-second budget does not save it, a hung run just sits
+  // on RUNNING and blocks every later attempt. maxPages is the vangnet for exactly that case.
+  it("stops after maxPages instead of spinning forever against an unreachable total", async () => {
+    const paginas = Array.from({ length: 5 }, (_, i) => ({
+      results: [payload(`${i}1111111-1111-4111-8111-111111111111`)],
+      totalDocuments: 1000, // never satisfied by pageSize-1 pages
+    }));
+    const { client, zoekKlokaanbod } = clientMet(paginas);
+
+    const uit = await syncSnede({
+      client,
+      snede: { auctionDate: "20260807", auctionLocationKey: "NAALDWIJK" },
+      pageSize: 1,
+      maxPages: 3,
+      writePage: async (rows) => writeResultaat(rows.length),
+      now: () => new Date(),
+    });
+
+    expect(zoekKlokaanbod).toHaveBeenCalledTimes(3);
+    expect(uit.rowsProcessed).toBe(3);
+    expect(uit.totalDocuments).toBe(1000);
+    expect(uit.compleet).toBe(false);
+  });
 });
