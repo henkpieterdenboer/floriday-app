@@ -2479,6 +2479,41 @@ describe("writeClockPage", () => {
     const uit = await writeClockPage([rij(), rij()], new Date("2026-08-06T10:00:00.000Z"));
     expect(uit).toMatchObject({ rowsProcessed: 1, duplicatesCollapsed: 1 });
   });
+
+  // Prisma.join is de reden dat dit een batchfunctie is in plaats van een lus, en met
+  // alleen de tests hierboven wordt dat pad nooit uitgevoerd - die schrijven één regel, of
+  // twee met dezelfde sleutel die na ontdubbelen weer één worden.
+  it("writes two distinct lines in one call", async () => {
+    const uit = await writeClockPage(
+      [rij(), rij({ clockSupplyLineId: TWEEDE_ID, currentNumberOfPieces: 99 })],
+      new Date("2026-08-06T10:00:00.000Z"),
+    );
+
+    expect(uit).toMatchObject({ rowsProcessed: 2, duplicatesCollapsed: 0 });
+    const tweede = await prisma.clockSupplyLine.findUnique({
+      where: { clockSupplyLineId: TWEEDE_ID },
+    });
+    expect(tweede?.currentNumberOfPieces).toBe(99);
+  });
+
+  // De kolomlijst, de VALUES-lijst en de SET-lijst zijn drie losse stukken tekst. Vergeet
+  // iemand er een veld in, dan compileert alles gewoon door en wordt dat veld stilzwijgend
+  // nooit weggeschreven. Dit is het SQL-equivalent van de compileercontrole die
+  // changed-lines.ts wél heeft; controleer bij het schrijven dat de test faalt als je er
+  // een kolom uit haalt.
+  it("writes every field of the row shape", async () => {
+    // isSynthetic hoort er bewust niet in: afgeleid van reference, nooit opgeslagen.
+    const verwacht = Object.keys(rij()).filter((veld) => veld !== "isSynthetic");
+
+    await writeClockPage([rij()], new Date("2026-08-06T10:00:00.000Z"));
+    const opgeslagen = await prisma.clockSupplyLine.findUnique({
+      where: { clockSupplyLineId: ID },
+    });
+
+    for (const veld of verwacht) {
+      expect(opgeslagen, `kolom ${veld} ontbreekt in de INSERT`).toHaveProperty(veld);
+    }
+  });
 });
 ```
 
