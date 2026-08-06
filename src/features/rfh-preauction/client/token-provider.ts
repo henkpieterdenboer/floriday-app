@@ -44,7 +44,19 @@ export function createRfhTokenProvider(options: RfhTokenProviderOptions): TokenC
       onderweg = vernieuw()
         .then(({ accessToken, expiresInSeconds }) => {
           token = accessToken;
-          verlooptOp = now() + Math.max(expiresInSeconds - MARGE_SECONDEN, 0) * 1000;
+          // If the lifetime is shorter than the margin, `expiresInSeconds - MARGE_SECONDEN`
+          // goes negative and a naive Math.max(..., 0) would make the token expire the
+          // instant it arrives - every next getToken() would then refresh again, which is
+          // the exact loop this cache exists to prevent, and on a rotating credential every
+          // extra refresh is an extra chance to lose the session. Falling back to half the
+          // lifetime keeps a usable window instead: shorter than usual, but never zero for
+          // as long as expiresInSeconds is positive. Nothing observed from Okta triggers
+          // this today (it hands back ~3600, and requestAccessToken falls back to 3600 when
+          // expires_in is missing), but the fallback should hold regardless of what Okta
+          // happens to send.
+          const bruikbareSeconden =
+            expiresInSeconds > MARGE_SECONDEN ? expiresInSeconds - MARGE_SECONDEN : expiresInSeconds / 2;
+          verlooptOp = now() + Math.max(bruikbareSeconden, 0) * 1000;
           return accessToken;
         })
         .finally(() => {
@@ -54,6 +66,15 @@ export function createRfhTokenProvider(options: RfhTokenProviderOptions): TokenC
       return onderweg;
     },
 
+    // Deliberately does not touch `onderweg`. If a refresh is already under way when this
+    // is called, that refresh is a real round trip to Okta that has not resolved yet - its
+    // result is by construction fresher than whatever this invalidate() is trying to
+    // discard, so a caller that lands on it afterwards is not getting a stale token. Task 6
+    // relies on exactly this: on a 401 it calls invalidate() and immediately retries via
+    // getToken(); if a refresh happens to already be in flight at that moment, the retry
+    // rides along on it instead of forcing a second, redundant rotation. Clearing `onderweg`
+    // here "for tidiness" would remove that benefit without fixing anything - the in-flight
+    // promise still resolves and still gets used by whoever awaited it before.
     invalidate(): void {
       token = null;
       verlooptOp = 0;

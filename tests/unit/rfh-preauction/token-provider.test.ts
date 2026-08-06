@@ -45,6 +45,21 @@ describe("createRfhTokenProvider", () => {
     expect(await provider.getToken()).toBe("a2");
   });
 
+  // Not in the plan's four tests either. Added after review flagged that a lifetime
+  // shorter than MARGE_SECONDEN would otherwise make the token expire on arrival, forcing
+  // a refresh on every single getToken() call - the very loop this cache exists to avoid,
+  // and each one an avoidable spend of the rotating refresh token.
+  it("does not refresh on every call when the lifetime is shorter than the margin", async () => {
+    const vernieuw = vi.fn(async () => ({ accessToken: "a1", expiresInSeconds: 100 }));
+    let nu = 0;
+    const provider = createRfhTokenProvider({ vernieuw, now: () => nu });
+
+    expect(await provider.getToken()).toBe("a1");
+    nu = 10_000; // 10s later, well inside the half-lifetime fallback window
+    expect(await provider.getToken()).toBe("a1");
+    expect(vernieuw).toHaveBeenCalledTimes(1);
+  });
+
   // Not in the plan's four tests, added after checking what happens when `vernieuw`
   // rejects. A rotating refresh token cannot be re-minted from code, so a token provider
   // that permanently cached a rejected in-flight promise after one network blip would take
