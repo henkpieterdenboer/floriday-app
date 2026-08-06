@@ -665,8 +665,30 @@ import {
   vernieuwOnderSlot,
 } from "@/features/rfh-preauction/client/session-store";
 
+// RfhSession heeft één rij met een vaste id, dus er is geen testvoorvoegsel te bedenken
+// zoals tests/helpers/test-ids.ts dat voor de archieftabellen doet: de rij die deze test
+// aanmaakt ís de rij die npm run rfh-koppel aanmaakt. Zonder deze bewaar-en-herstel wist
+// de eerstvolgende npm test de echte koppeling, en die is niet terug te zetten - de
+// refresh token is in de browser eenmalig zichtbaar. Dit project heeft dat patroon al
+// eens data gekost.
+let bestaande: { refreshToken: string; lastRefreshedAt: Date | null; lastError: string | null } | null =
+  null;
+
+beforeAll(async () => {
+  const rij = await prisma.rfhSession.findUnique({ where: { id: "default" } });
+  bestaande = rij
+    ? { refreshToken: rij.refreshToken, lastRefreshedAt: rij.lastRefreshedAt, lastError: rij.lastError }
+    : null;
+});
+
 afterEach(async () => {
   await prisma.rfhSession.deleteMany({});
+});
+
+afterAll(async () => {
+  if (bestaande) {
+    await prisma.rfhSession.create({ data: { id: "default", ...bestaande } });
+  }
 });
 
 describe("session-store", () => {
