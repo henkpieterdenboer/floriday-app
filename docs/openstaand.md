@@ -35,6 +35,18 @@ De ingest zelf staat: getest, gekoppeld op staging, en heeft via de inhaalslag 5
 klokregels weggeschreven. Wat nog moet gebeuren staat los van bouwen — het is een mensenstap
 en een meting.
 
+- [ ] **Eerst het schema pushen.** `npm run db:push -- --env .env.lokaal-productie`, en dit
+      moet gebeuren **vóórdat** de deploy met de klokaanbod-code landt — dezelfde reden als
+      het AppSetting-incident van 5 augustus 2026 (zie de kop van `scripts/db-push.mjs`).
+      Zonder dit mist productie de `RfhSession`-tabel en 500't de hele statuspagina zodra de
+      code die haar aanraakt live gaat, niet alleen de nieuwe kaart.
+- [ ] **Daarna de drie RFH_PREAUCTION_\*-variabelen zetten in Vercel (Production).**
+      `RFH_PREAUCTION_API_BASE_URL`, `RFH_PREAUCTION_TOKEN_URL` en `RFH_PREAUCTION_CLIENT_ID` —
+      de productiewaarden uit het uitgecommentarieerde blok in `.env.example`, niet de
+      staging-waarden. Geverifieerd tegen `.env.vercel-production`: die drie staan er nu niet
+      in. Zonder deze drie gooit `createPreauctionClient()` een fout **vóórdat** `startRun()`
+      ooit wordt aangeroepen — er verschijnt dan geen `SyncRun`-rij, alleen een kale 500 vanaf
+      de cron-route, onzichtbaar op de statuspagina.
 - [ ] **Op productie koppelen.** Vereist een mens die inlogt op
       `https://pre-auction.royalfloraholland.com` in een **privévenster** en de refresh token
       overneemt uit `localStorage` — zie de kop van `scripts/rfh-koppel.ts` voor de precieze
@@ -42,10 +54,12 @@ en een meting.
       en aan een browsersessie gebonden. Daarna:
       `npm run rfh-koppel -- --env .env.lokaal-productie --token <token>`.
 - [ ] **De cron staat al klaar, maar doet nog niets.** `/api/cron/klok` staat in `vercel.json`
-      op elke 5 minuten en draait al mee in elke productiedeploy — maar zonder een gekoppelde
-      `RfhSession` faalt elke run met een leesbare fout (`SyncRun.status = FAILED`,
-      `errorMessage` verwijst naar `rfh-koppel`). Geen stille dataverliezen, wel een wachtende
-      taak die niets doet tot de koppeling er is.
+      op elke 5 minuten en draait al mee in elke productiedeploy. Zodra de twee stappen
+      hierboven staan (schema gepusht, de drie variabelen gezet in Vercel) maar de koppeling
+      er nog niet is, faalt elke run met een leesbare fout (`SyncRun.status = FAILED`,
+      `errorMessage` verwijst naar `rfh-koppel`) — geen stille dataverliezen, wel een
+      wachtende taak die niets doet tot de koppeling er is. Staan de drie variabelen er nog
+      niet, dan geldt dat niet: zie de stap erboven.
 - [ ] **De meting uit spec §11.1 afmaken.** Zie
       `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §11.1. Al
       gemeten: de voorverkooplink wordt losgelaten zodra een veildag voorbij is (nul van 540 op
