@@ -15,12 +15,27 @@ import { z } from "zod";
  * shape we have not seen.
  *
  * Run `npm run rfh-typeproef` before trusting any of this - it measures the real types over
- * hundreds of records instead of the handful this was drafted from.
+ * hundreds of records instead of the handful this was drafted from. It already caught two
+ * mistakes in this file: sequenceOnLoadCarrier and auctioningSequence arrive as a string on
+ * most records rather than a number, and clockPresalesSupplyLineId can be `""` rather than
+ * absent or a real UUID. Both are visible below.
  */
+
+/**
+ * "" and not present is the same absence, for clockPresalesSupplyLineId. Measured on staging
+ * on 6 August 2026: 20260806 NAALDWIJK record 21 (reference 9100151942796) carries `""`
+ * where every other record either has a real UUID or omits the field. `.uuid()` rejects the
+ * empty string outright, which would drop the whole page over one record that is simply not
+ * linked to a presale line - exactly the case this column exists to represent. Floriday's own
+ * feed has the same habit (see fixtures-zijn-echte-data / floriday-lege-strings lessons), so
+ * this is a known shape of these APIs rather than a one-off.
+ */
+const leegAlsAfwezig = (waarde: unknown) => (waarde === "" ? undefined : waarde);
+
 export const clockSupplyLineSchema = z.object({
   id: z.string().uuid(),
   reference: z.string(),
-  clockPresalesSupplyLineId: z.string().uuid().nullish(),
+  clockPresalesSupplyLineId: z.preprocess(leegAlsAfwezig, z.string().uuid().nullish()),
 
   organization: z.object({
     id: z.string().uuid(),
@@ -57,7 +72,12 @@ export const clockSupplyLineSchema = z.object({
   packageTypeCode: z.union([z.string(), z.number()]).nullish(),
   packageTypeName: z.string().nullish(),
   loadCarrierCode: z.string().nullish(),
-  sequenceOnLoadCarrier: z.number().int().nullish(),
+  /**
+   * A number in the single record this file was first drafted from, but a string on every one
+   * of the 1117 records the typeproef measured across 3, 5, 6 and 7 August 2026. Both are real;
+   * the mapper's `getal()` coerces whichever one arrives.
+   */
+  sequenceOnLoadCarrier: z.union([z.string(), z.number()]).nullish(),
 
   preSaleInitialNumberOfPieces: z.number().int().nullish(),
   preSaleCurrentNumberOfPieces: z.number().int().nullish(),
@@ -66,7 +86,8 @@ export const clockSupplyLineSchema = z.object({
 
   auctionLocation: z.string(),
   clockShortName: z.string().nullish(),
-  auctioningSequence: z.number().int().nullish(),
+  /** Same string-or-number inconsistency as sequenceOnLoadCarrier above, same evidence. */
+  auctioningSequence: z.union([z.string(), z.number()]).nullish(),
   isAuctioned: z.boolean().nullish(),
   digitalAuctionSupplyType: z.string().nullish(),
   deliveryFormBarcode: z.string().nullish(),

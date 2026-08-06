@@ -75,6 +75,18 @@ export interface ClockSupplyLineRow {
 const tekst = (waarde: string | number | null | undefined): string | null =>
   waarde === null || waarde === undefined ? null : String(waarde);
 
+/**
+ * sequenceOnLoadCarrier and auctioningSequence arrive as a number for most records but as a
+ * numeric string for others (measured across several auction days on staging, 6 August
+ * 2026) - the same inconsistency the schema already tolerates for productCode and
+ * relationNumber, except these two are stored as Int rather than String. Number() on a
+ * genuine numeric string round-trips cleanly; a value that is not numeric at all would
+ * become NaN here rather than crash the mapper, which is the right failure mode for a
+ * column that is nullable anyway.
+ */
+const getal = (waarde: string | number | null | undefined): number | null =>
+  waarde === null || waarde === undefined ? null : Number(waarde);
+
 export function toClockSupplyLineRow(
   payload: ClockSupplyLinePayload,
   auctionDateKey: string,
@@ -118,7 +130,7 @@ export function toClockSupplyLineRow(
     packageTypeCode: tekst(payload.packageTypeCode),
     packageTypeName: payload.packageTypeName ?? null,
     loadCarrierCode: payload.loadCarrierCode ?? null,
-    sequenceOnLoadCarrier: payload.sequenceOnLoadCarrier ?? null,
+    sequenceOnLoadCarrier: getal(payload.sequenceOnLoadCarrier),
 
     preSaleInitialNumberOfPieces: payload.preSaleInitialNumberOfPieces ?? null,
     preSaleCurrentNumberOfPieces: payload.preSaleCurrentNumberOfPieces ?? null,
@@ -130,7 +142,7 @@ export function toClockSupplyLineRow(
 
     auctionLocation: payload.auctionLocation,
     clockShortName: payload.clockShortName ?? null,
-    auctioningSequence: payload.auctioningSequence ?? null,
+    auctioningSequence: getal(payload.auctioningSequence),
     isAuctioned: payload.isAuctioned ?? false,
     digitalAuctionSupplyType: payload.digitalAuctionSupplyType ?? null,
     deliveryFormBarcode: payload.deliveryFormBarcode ?? null,
