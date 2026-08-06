@@ -52,6 +52,7 @@ describe("runClockSyncWith", () => {
     expect(uit.versionsAdded).toBe(56);
     expect(uit.pagesProcessed).toBe(56);
     expect(uit.onvolledigeSneden).toEqual([]);
+    expect(uit.mislukteSneden).toEqual([]);
     expect(finishRun).toHaveBeenCalledWith(
       1n,
       expect.objectContaining({ status: "SUCCEEDED", pagesProcessed: 56 }),
@@ -95,7 +96,68 @@ describe("runClockSyncWith", () => {
     expect(outcome.warning).toMatch(/maxPaginas/);
   });
 
-  it("marks the run failed and rethrows when a slice throws", async () => {
+  // Het punt van spec §6: "Een mislukte snede kost één snede, niet de hele veildag." Eén
+  // van de 28 sneden gooit; de overige 27, inclusief sneden die na de mislukte snede aan de
+  // beurt komen (andere veillocaties op dezelfde dag, en latere veildagen), moeten gewoon
+  // doorgaan. Dat is het gedrag dat de oude test ("marks the run failed and rethrows")
+  // hiervoor juist niet toeliet - een for-loop die rethrowt breekt af, en alles ná de eerste
+  // mislukking wordt dan overgeslagen.
+  it("does not abort the run when a slice throws - later slices still run", async () => {
+    const finishRun = vi.fn();
+    const syncSnede = vi.fn(async ({ snede }: { snede: Snede }) => {
+      if (snede.auctionLocationKey === "NAALDWIJK") {
+        throw new Error("RFH request failed: POST /clock-supply-search -> 503");
+      }
+      return {
+        rowsProcessed: 10,
+        versionsAdded: 2,
+        totalDocuments: 10,
+        pagesFetched: 1,
+        stopReden: "totaal-bereikt" as const,
+        compleet: true,
+      };
+    });
+    const deps = fakeDeps({ finishRun, syncSnede });
+
+    const uit = await runClockSyncWith({ trigger: "CRON" }, deps);
+
+    // Alle 28 sneden zijn geprobeerd, ook de sneden ná NAALDWIJK op elke veildag.
+    expect(syncSnede).toHaveBeenCalledTimes(28);
+    // Vier veildagen, dus vier mislukte NAALDWIJK-sneden - en de andere 24 zijn wél verwerkt.
+    expect(uit.mislukteSneden).toHaveLength(4);
+    expect(uit.rowsProcessed).toBe(24 * 10);
+    expect(uit.versionsAdded).toBe(24 * 2);
+  });
+
+  it("reports FAILED - not SUCCEEDED with a warning - when one or more slices threw", async () => {
+    const finishRun = vi.fn();
+    const deps = fakeDeps({
+      finishRun,
+      syncSnede: vi.fn(async ({ snede }: { snede: Snede }) => {
+        if (snede.auctionLocationKey === "NAALDWIJK") {
+          throw new Error("RFH request failed: POST /clock-supply-search -> 503");
+        }
+        return {
+          rowsProcessed: 1,
+          versionsAdded: 0,
+          totalDocuments: 1,
+          pagesFetched: 1,
+          stopReden: "totaal-bereikt" as const,
+          compleet: true,
+        };
+      }),
+    });
+
+    await runClockSyncWith({ trigger: "CRON" }, deps);
+
+    const outcome = finishRun.mock.calls[0][1];
+    expect(outcome.status).toBe("FAILED");
+    expect(outcome.errorMessage).toMatch(/4 van 28 sneden mislukt/);
+    expect(outcome.errorMessage).toMatch(/NAALDWIJK/);
+    expect(outcome.errorMessage).toMatch(/503/);
+  });
+
+  it("reports FAILED with a distinct message when every slice throws - not a successful run that accomplished nothing", async () => {
     const finishRun = vi.fn();
     const deps = fakeDeps({
       finishRun,
@@ -104,18 +166,21 @@ describe("runClockSyncWith", () => {
       }),
     });
 
-    await expect(runClockSyncWith({ trigger: "CRON" }, deps)).rejects.toThrow(/503/);
+    const uit = await runClockSyncWith({ trigger: "CRON" }, deps);
+
+    expect(uit.mislukteSneden).toHaveLength(28);
+    expect(uit.rowsProcessed).toBe(0);
     const outcome = finishRun.mock.calls[0][1];
     expect(outcome.status).toBe("FAILED");
-    expect(outcome.errorMessage).toMatch(/503/);
+    expect(outcome.errorMessage).toMatch(/Alle 28 sneden mislukt/);
   });
 
-  // Not one of the plan's three named tests, but the plan's slice-naming wrapper is only
-  // worth having if `{ cause }` actually carries the original error through to the top -
-  // otherwise it is dead code that happens to also prefix a message. This pins both halves:
-  // the rethrown error names the slice, and .cause is still the exact original error object
-  // (not just its message), so a caller that wants the original stack or error type can get it.
-  it("names the failing slice while preserving the original error via cause", async () => {
+  // De rethrow-wrapper bestaat om de snede aan de fout te plakken vóórdat die naar
+  // SyncRun.errorMessage of de statuspagina gaat - zie de doc comment bij MislukteSnede.
+  // Dit pint beide helften: het bericht noemt de snede, en .cause is nog steeds het
+  // oorspronkelijke foutobject (niet alleen de tekst ervan), zodat een lezer die de originele
+  // stack of het originele type nodig heeft die nog kan pakken.
+  it("names the failing slice in mislukteSneden while preserving the original error via cause", async () => {
     const origineel = new Error("RFH request failed: POST /clock-supply-search -> 503");
     const deps = fakeDeps({
       finishRun: vi.fn(),
@@ -132,17 +197,21 @@ describe("runClockSyncWith", () => {
       }),
     });
 
-    await expect(runClockSyncWith({ trigger: "CRON" }, deps)).rejects.toMatchObject({
-      message: expect.stringMatching(/NAALDWIJK.*503/s),
-      cause: origineel,
-    });
+    const uit = await runClockSyncWith({ trigger: "CRON" }, deps);
+
+    expect(uit.mislukteSneden).toHaveLength(4);
+    for (const snede of uit.mislukteSneden) {
+      expect(snede.auctionLocationKey).toBe("NAALDWIJK");
+      expect(snede.fout.message).toMatch(/NAALDWIJK.*503/s);
+      expect(snede.fout.cause).toBe(origineel);
+    }
   });
 
   // Small, per the review: the try/catch around finishRun in the failure path already behaves
-  // correctly (the original sync error is rethrown regardless), but nothing pinned that down.
-  // A later refactor of that block could silently let a finishRun failure replace the sync
-  // failure the caller actually needs to see. This locks in which one wins.
-  it("rethrows the original sync failure, not a finishRun failure that happens while recording it", async () => {
+  // correctly (a genuinely unexpected failure - here, finishRun itself throwing - is rethrown
+  // regardless), but nothing pinned that down. This locks in which error wins when even the
+  // attempt to record the failure fails.
+  it("rethrows when finishRun itself fails while recording a run that had mislukte sneden", async () => {
     const finishRun = vi.fn(async () => {
       throw new Error("database is down");
     });
@@ -153,7 +222,9 @@ describe("runClockSyncWith", () => {
       }),
     });
 
-    await expect(runClockSyncWith({ trigger: "CRON" }, deps)).rejects.toThrow(/503/);
-    expect(finishRun).toHaveBeenCalledWith(1n, expect.objectContaining({ status: "FAILED" }));
+    await expect(runClockSyncWith({ trigger: "CRON" }, deps)).rejects.toThrow(/database is down/);
+    // De eerste poging (met de mislukte-sneden-tekst) faalde; de outer catch probeert het nog
+    // eens met een kortere FAILED-melding voordat hij alsnog opgeeft.
+    expect(finishRun).toHaveBeenCalledTimes(2);
   });
 });

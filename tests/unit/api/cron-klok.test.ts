@@ -8,6 +8,7 @@ vi.mock("@/features/rfh-preauction/sync/run-clock-sync", () => ({
     versionsAdded: 340,
     pagesProcessed: 33,
     onvolledigeSneden: [],
+    mislukteSneden: [],
   })),
 }));
 vi.mock("@/features/floriday/sync/run-log", () => ({ isErEenRunBezig: vi.fn(async () => false) }));
@@ -74,6 +75,7 @@ describe("GET /api/cron/klok", () => {
       onvolledigeSneden: [
         { auctionDate: "20260806", auctionLocationKey: "NAALDWIJK", stopReden: "maxPaginas" },
       ],
+      mislukteSneden: [],
     });
 
     const res = await GET(verzoek("Bearer geheim"));
@@ -82,6 +84,40 @@ describe("GET /api/cron/klok", () => {
     expect(await res.json()).toMatchObject({
       onvolledigeSneden: [
         { auctionDate: "20260806", auctionLocationKey: "NAALDWIJK", stopReden: "maxPaginas" },
+      ],
+    });
+  });
+
+  // Anders dan onvolledigeSneden hierboven (wél data, niet compleet): dit zijn sneden
+  // waarvan het ophalen zelf misging. Een reader van het cron-antwoord moet dat uit elkaar
+  // kunnen houden zonder de SyncRun-rij te hoeven opzoeken - zie MislukteSnede in
+  // run-clock-sync.ts.
+  it("names the failed slice and its error in the response", async () => {
+    vi.mocked(runClockSync).mockResolvedValueOnce({
+      snedenVerwerkt: 28,
+      rowsProcessed: 11000,
+      versionsAdded: 290,
+      pagesProcessed: 39,
+      onvolledigeSneden: [],
+      mislukteSneden: [
+        {
+          auctionDate: "20260806",
+          auctionLocationKey: "NAALDWIJK",
+          fout: new Error("20260806 NAALDWIJK: RFH request failed: POST /clock-supply-search -> 503"),
+        },
+      ],
+    });
+
+    const res = await GET(verzoek("Bearer geheim"));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      mislukteSneden: [
+        {
+          auctionDate: "20260806",
+          auctionLocationKey: "NAALDWIJK",
+          foutmelding: expect.stringMatching(/503/),
+        },
       ],
     });
   });

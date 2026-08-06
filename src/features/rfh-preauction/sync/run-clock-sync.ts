@@ -28,6 +28,17 @@ export interface OnvolledigeSnede extends Snede {
   stopReden: SnedeStopReden;
 }
 
+/**
+ * A slice whose fetch threw, rather than one that came back short - see the module doc
+ * comment on `runClockSyncWith` for why these are kept apart from OnvolledigeSnede. `fout`
+ * carries the slice-prefixed Error with the original failure preserved via `cause`, the same
+ * enrichment the old rethrow used to carry to the top - a caller that wants the original
+ * stack or error type can still get it here, even though the run itself no longer aborts.
+ */
+export interface MislukteSnede extends Snede {
+  fout: Error;
+}
+
 export interface RunClockSyncResult {
   snedenVerwerkt: number;
   rowsProcessed: number;
@@ -35,6 +46,8 @@ export interface RunClockSyncResult {
   /** Real API pages fetched across every slice. See the field of the same name below for why. */
   pagesProcessed: number;
   onvolledigeSneden: OnvolledigeSnede[];
+  /** Slices whose fetch threw. Empty on a clean run. See MislukteSnede for why this is not merged with onvolledigeSneden. */
+  mislukteSneden: MislukteSnede[];
 }
 
 export interface RunClockSyncDeps {
@@ -63,6 +76,15 @@ export interface RunClockSyncDeps {
  * so "did we get everything" can only be answered by comparing against totalDocuments per
  * slice; reporting that comparison is the closest thing to a completeness proof available
  * (spec §9).
+ *
+ * A slice whose fetch throws does not abort the run either (spec §6: "Een mislukte snede
+ * kost één snede, niet de hele veildag"). A structural problem on one location - a 403, a
+ * record that breaks the Zod schema - must not take every later auction day down with it on
+ * a feed where a missed day cannot be fetched again. The failure is recorded in
+ * `mislukteSneden` and the loop moves on; the SyncRun this produces is `FAILED` if one or
+ * more slices threw (never `SUCCEEDED` with a mere warning - a reader must not be able to
+ * mistake "we lost a slice" for "all good"), but it still carries the rows and versions the
+ * other slices actually wrote, because that work is real and already committed.
  */
 export async function runClockSyncWith(
   options: RunClockSyncOptions,
@@ -84,22 +106,32 @@ export async function runClockSyncWith(
   // matters. The warning string below is derived from this array rather than tracked
   // separately, so the two can never disagree about which slices were incomplete or why.
   const onvolledigeSneden: OnvolledigeSnede[] = [];
+  // Slices whose fetch threw, kept apart from onvolledigeSneden - see MislukteSnede's doc
+  // comment for why a slice that came back short is a different problem from one that never
+  // came back at all.
+  const mislukteSneden: MislukteSnede[] = [];
 
   try {
     for (const snede of sneden) {
-      // Verrijk de fout met de snede voordat hij naar boven gaat. postJson kent alleen het
-      // pad, en dat is voor deze API altijd dezelfde literal - twee mislukkingen op
-      // verschillende veildagen leveren anders bijna identieke tekst op in
-      // SyncRun.errorMessage en op de statuspagina.
-      const uit = await deps
-        .syncSnede({ snede })
-        .catch((fout: unknown) => {
-          const bericht = fout instanceof Error ? fout.message : String(fout);
-          throw new Error(
-            `${snede.auctionDate} ${snede.auctionLocationKey}: ${bericht}`,
-            { cause: fout },
-          );
-        });
+      let uit: SyncSnedeResult;
+      try {
+        uit = await deps.syncSnede({ snede });
+      } catch (fout: unknown) {
+        // Verrijk de fout met de snede voordat hij bewaard wordt. postJson kent alleen het
+        // pad, en dat is voor deze API altijd dezelfde literal - twee mislukkingen op
+        // verschillende veildagen leveren anders bijna identieke tekst op in
+        // SyncRun.errorMessage en op de statuspagina.
+        const bericht = fout instanceof Error ? fout.message : String(fout);
+        const verrijkt = new Error(
+          `${snede.auctionDate} ${snede.auctionLocationKey}: ${bericht}`,
+          { cause: fout },
+        );
+        mislukteSneden.push({ ...snede, fout: verrijkt });
+        options.onProgress?.(`${snede.auctionDate} ${snede.auctionLocationKey}: mislukt - ${bericht}`);
+        // Geen rethrow: spec §6 - een mislukte snede kost één snede, niet de rest van de run.
+        continue;
+      }
+
       rowsProcessed += uit.rowsProcessed;
       versionsAdded += uit.versionsAdded;
       pagesProcessed += uit.pagesFetched;
@@ -120,6 +152,37 @@ export async function runClockSyncWith(
             .join(", ")}`
         : undefined;
 
+    if (mislukteSneden.length > 0) {
+      // Elke mislukking, of het er één is of allemaal: dit mag nooit als SUCCEEDED met een
+      // kanttekening wegschrijven. Een kanttekening leest als "gesynchroniseerd, met een
+      // detail"; dit is "een veildag die we nooit meer terugkrijgen". "Alle sneden mislukt"
+      // is bewust geen apart geval - het is gewoon het uiterste van dezelfde regel, en de
+      // tekst hieronder zegt vanzelf "alle X" wanneer dat zo uitkomt.
+      const lijst = mislukteSneden.map((s) => s.fout.message).join("; ");
+      const errorMessage =
+        mislukteSneden.length === sneden.length
+          ? `Alle ${sneden.length} sneden mislukt: ${lijst}`
+          : `${mislukteSneden.length} van ${sneden.length} sneden mislukt, de rest is doorgegaan: ${lijst}`;
+
+      await deps.finishRun(runId, {
+        status: "FAILED",
+        pagesProcessed,
+        rowsProcessed,
+        versionsAdded,
+        errorMessage,
+        warning,
+      });
+
+      return {
+        snedenVerwerkt: sneden.length,
+        rowsProcessed,
+        versionsAdded,
+        pagesProcessed,
+        onvolledigeSneden,
+        mislukteSneden,
+      };
+    }
+
     await deps.finishRun(runId, {
       status: "SUCCEEDED",
       pagesProcessed,
@@ -134,8 +197,11 @@ export async function runClockSyncWith(
       versionsAdded,
       pagesProcessed,
       onvolledigeSneden,
+      mislukteSneden,
     };
   } catch (error: unknown) {
+    // Wordt alleen nog bereikt door iets onverwachts - finishRun zelf die faalt, of een bug
+    // hierboven - niet meer door een snede die mislukte - zie de doc comment op deze functie.
     const errorMessage = error instanceof Error ? error.message : String(error);
     try {
       await deps.finishRun(runId, { status: "FAILED", errorMessage });

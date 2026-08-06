@@ -61,18 +61,30 @@ async function main(): Promise<void> {
   // One run per day rather than one run over all of them: each day gets its own SyncRun row,
   // so a failure halfway is visible per day instead of as one opaque failure, and re-running
   // a single day is a matter of narrowing the range.
+  let ietsMislukt = false;
   for (const dag of dagen) {
     const uit = await runClockSync({
       trigger: "BACKFILL",
       veildagen: [dag],
       onProgress: (bericht) => console.log(`  ${bericht}`),
     });
+    if (uit.mislukteSneden.length > 0) ietsMislukt = true;
     console.log(
       `${dag}: ${uit.rowsProcessed} regels, ${uit.versionsAdded} versies` +
         (uit.onvolledigeSneden.length > 0
           ? `, ONVOLLEDIG: ${uit.onvolledigeSneden.map((s) => s.auctionLocationKey).join(", ")}`
+          : "") +
+        // Anders dan ONVOLLEDIG (wél data, niet compleet): dit zijn sneden waarvan het ophalen
+        // zelf misging. runClockSync gaat door met de rest, maar deze dag is niet compleet.
+        (uit.mislukteSneden.length > 0
+          ? `, MISLUKT: ${uit.mislukteSneden.map((s) => `${s.auctionLocationKey} (${s.fout.message})`).join(", ")}`
           : ""),
     );
+  }
+
+  if (ietsMislukt) {
+    console.error("\nEén of meer sneden zijn mislukt - zie MISLUKT hierboven.");
+    process.exitCode = 1;
   }
 }
 

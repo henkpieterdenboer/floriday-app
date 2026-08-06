@@ -52,6 +52,13 @@ export async function GET(request: Request): Promise<NextResponse> {
         auctionLocationKey: s.auctionLocationKey,
         stopReden: s.stopReden,
       })),
+      // Sneden waarvan het ophalen zelf misging - anders dan onvolledigeSneden hierboven, die
+      // wél data opleverden maar niet compleet. Zie MislukteSnede in run-clock-sync.ts.
+      mislukteSneden: result.mislukteSneden.map((s) => ({
+        auctionDate: s.auctionDate,
+        auctionLocationKey: s.auctionLocationKey,
+        foutmelding: s.fout.message,
+      })),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
