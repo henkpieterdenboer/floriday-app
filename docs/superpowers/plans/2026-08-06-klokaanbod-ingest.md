@@ -1963,6 +1963,11 @@ export interface ClockSupplyLineRow {
    * Whether this is RFH's own staging test data. Derived from the reference prefix, not from
    * isFromSyntheticRequest: that flag was false on every record measured, including the 174
    * obviously synthetic ones (spec §3.2).
+   *
+   * Derived, and deliberately not a column. `reference` is stored and is the source of
+   * truth; a second copy could drift from it. This field exists because change detection
+   * and the search layer want it in memory, not because it needs persisting - the writer
+   * strips it before insert and recomputes it when it reads rows back.
    */
   isSynthetic: boolean;
 }
