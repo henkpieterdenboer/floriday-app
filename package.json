@@ -12,6 +12,7 @@
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
     "backfill": "tsx scripts/backfill.ts",
+    "backfill-klok": "tsx scripts/backfill-klok.ts",
     "capture-fixtures": "tsx scripts/capture-fixtures.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "db:push": "node scripts/db-push.mjs",
