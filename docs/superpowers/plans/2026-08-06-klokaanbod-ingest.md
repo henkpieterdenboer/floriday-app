@@ -755,14 +755,19 @@ describe("session-store", () => {
         return { nieuweRefreshToken: `na-${naam}`, waarde: naam };
       });
 
-    await Promise.all([loop("a", 300), loop("b", 0)]);
+    // A pakt het slot en blijft 500 ms hangen; B start een kwart seconde later, zodat de
+    // volgorde vastligt en de test niet twee uitkomsten hoeft toe te staan. Ruim genomen,
+    // want B moet zijn transactie kunnen openen over een WebSocket naar Neon en door
+    // PgBouncer heen, en dat is op een koude verbinding geen vaste tijd. Dit is de enige
+    // tijdsaanname in het bestand.
+    await Promise.all([loop("a", 500), vertraagd(250, () => loop("b", 0))]);
 
-    // Wie eerst is doet er niet toe; dat ze elkaar niet overlappen wel. Twee starts
-    // achter elkaar zonder tussenliggende "klaar" zou betekenen dat het slot niets doet.
-    const eerste = gebeurtenissen[0].slice(0, 1);
-    const tweede = eerste === "a" ? "b" : "a";
-    expect(gebeurtenissen[1]).toBe(`${eerste}-klaar`);
-    expect(gebeurtenissen[2]).toBe(`${tweede}-start-na-${eerste}`);
+    // Twee beweringen, en de tweede is de scherpe. Dat de gebeurtenissen niet vervlechten
+    // toont aan dát er geserialiseerd wordt. Maar serialiseren alleen zou nog steeds twee
+    // keer dezelfde token kunnen oppakken - dat B de dóór A geroteerde waarde leest, is de
+    // eigenschap die de sessie redt.
+    expect(gebeurtenissen).toEqual(["a-start", "a-klaar", "b-start", "b-klaar"]);
+    expect(gezienDoorB).toBe("na-a");
   });
 });
 ```
