@@ -49,6 +49,19 @@ describe("veildagenVoorRun", () => {
       "20261027",
     ]);
   });
+
+  it("starts from the local day, not the UTC one, for a moment just before midnight UTC", () => {
+    // 23:30 UTC on 6 August is 01:30 on 7 August in Amsterdam (CEST, UTC+2) - already past
+    // local midnight. This is exactly the failure case the module exists for: a run
+    // stepping from the UTC calendar day would anchor on 6 August and miss 9 August, one
+    // day short of where local time actually is.
+    expect(veildagenVoorRun(new Date("2026-08-06T23:30:00.000Z"))).toEqual([
+      "20260806",
+      "20260807",
+      "20260808",
+      "20260809",
+    ]);
+  });
 });
 
 describe("sleutelNaarDatum", () => {

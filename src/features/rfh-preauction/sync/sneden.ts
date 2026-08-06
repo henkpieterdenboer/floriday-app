@@ -34,8 +34,9 @@ export interface Snede {
 
 /**
  * Every slice one run walks. Unused locations answer with zero rather than an error, so
- * asking for all seven costs six cheap requests a day and removes the need to know in
- * advance which locations are in play.
+ * asking for all seven removes the need to know in advance which locations are in play.
+ * The extra requests that costs are cheap for the same reason the whole sync is - see the
+ * no-rate-limiter note in client/http.ts.
  */
 export function snedenVoor(veildagen: readonly string[]): Snede[] {
   return veildagen.flatMap((auctionDate) =>

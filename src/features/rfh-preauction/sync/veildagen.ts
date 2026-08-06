@@ -33,10 +33,17 @@ export function sleutelNaarDatum(sleutel: string): Date {
  * Which auction days one run covers: yesterday for the closing state, today, and two days
  * ahead because that is as far as supply is created (spec §3.5).
  *
- * Days are stepped from an anchor at 12:00 UTC rather than from `moment` itself. Adding
- * 24 hours to an arbitrary instant shifts local time by an hour across a DST boundary, and
- * near midnight that lands on the wrong calendar day. At midday there is no boundary close
- * enough for an hour to matter.
+ * What actually protects this near midnight is that the anchor is built from `vandaag` -
+ * the day key, already resolved correctly in Amsterdam time - rather than by stepping from
+ * `moment` itself. Adding 24-hour multiples in UTC to an arbitrary instant shifts local time
+ * by an hour across a DST boundary, and near midnight that shift can land on the wrong
+ * calendar day; stepping from the already-resolved key cannot, because the key is the right
+ * day before any offset is applied.
+ *
+ * The anchor is pinned at 12:00 UTC on top of that as extra margin, not because it is load
+ * bearing: Amsterdam never has a negative UTC offset, so any anchor hour up to roughly
+ * 21:00 UTC would keep the +1/+2 steps inside the same local day. Midday just makes that
+ * margin generous instead of tight.
  */
 export function veildagenVoorRun(moment: Date, terug = 1, vooruit = 2): string[] {
   const vandaag = veildagSleutel(moment);
