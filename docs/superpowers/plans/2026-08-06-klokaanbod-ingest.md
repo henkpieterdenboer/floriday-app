@@ -1724,6 +1724,54 @@ describe("toClockSupplyLineRow", () => {
     expect(row.isSynthetic).toBe(true);
   });
 
+  // De belangrijkste regel van deze taak staat in de client, niet in de mapper, en zou
+  // zonder deze test stil kunnen omslaan: hasPresale op true levert weer alleen het
+  // voorverkoopaanbod op, precies de blinde vlek waarvoor dit onderdeel bestaat. Controleer
+  // bij het schrijven dat de test faalt als je die regel omzet.
+  it("never restricts the search to presale", async () => {
+    let verstuurd: Record<string, unknown> | undefined;
+    const http = {
+      postJson: async (_pad: string, body: unknown) => {
+        verstuurd = body as Record<string, unknown>;
+        return { results: [], totalDocuments: 0 };
+      },
+    };
+
+    await createPreauctionClientWith(http).zoekKlokaanbod({
+      auctionDate: "20260807",
+      mainGroupKey: "1",
+      auctionLocationKey: "NAALDWIJK",
+      skip: 500,
+      take: 500,
+    });
+
+    expect(verstuurd?.hasPresale).toBe(false);
+    expect(verstuurd?.auctionDate).toBe("20260807");
+    expect(verstuurd?.skip).toBe(500);
+    expect(verstuurd?.searchFilterItems).toEqual([
+      { filterItemType: "MainGroup", filterOptionKeys: ["1"] },
+      { filterItemType: "AuctionLocation", filterOptionKeys: ["NAALDWIJK"] },
+    ]);
+  });
+
+  // De union-types bestaan omdat deze API inconsistent is over string tegenover getal.
+  // Zonder deze test draait het getal-pad van tekst() en String() nooit.
+  it("stringifies the codes that arrive as numbers", () => {
+    const row = toClockSupplyLineRow(
+      clockSupplyPageSchema.parse({
+        results: [{ ...PAYLOAD, productCode: 105127, packageTypeCode: 577, mainGroupCode: 1,
+          organization: { ...PAYLOAD.organization, relationNumber: 73100 } }],
+        totalDocuments: 1,
+      }).results[0],
+      "20260807",
+    );
+
+    expect(row.productCode).toBe("105127");
+    expect(row.packageTypeCode).toBe("577");
+    expect(row.mainGroupCode).toBe("1");
+    expect(row.supplierRelationNumber).toBe("73100");
+  });
+
   it("keeps a missing presale link as null", () => {
     const row = toClockSupplyLineRow(
       clockSupplyPageSchema.parse({
