@@ -122,8 +122,19 @@ describe("session-store", () => {
    * Serialiseren zonder die tweede eigenschap zou nog steeds twee keer dezelfde token
    * opnemen.
    *
-   * B start honderd milliseconden later zodat vaststaat wie er eerst is; zonder dat zou de
-   * volgorde van de race afhangen en zou de test twee uitkomsten moeten toestaan.
+   * B start een kwart seconde later zodat vaststaat wie er eerst is; zonder dat zou de
+   * volgorde van de race afhangen en zou de test twee uitkomsten moeten toestaan. Die marge
+   * moet A's transactie kunnen openen over een WebSocket naar Neon en door PgBouncer heen,
+   * en dat kan op een koude verbinding traag zijn - vandaar ruim in plaats van net genoeg.
+   * Het is de enige tijdsaanname in dit bestand.
+   *
+   * Eén gedeelde PrismaClient volstaat hier, en dat is niet vanzelfsprekend: als de pool de
+   * twee transacties zelf al na elkaar zou uitvoeren, zou deze test ook zonder het slot
+   * slagen en dus niets bewijzen. Dat doet hij niet. Haal de regel met
+   * pg_advisory_xact_lock uit session-store.ts weg en deze test valt om op vervlochten
+   * gebeurtenissen (waargenomen: b-start, a-start, b-klaar, a-klaar). De serialisatie komt
+   * dus aantoonbaar van het slot en niet van de pool. Wie hieraan sleutelt: doe die proef
+   * opnieuw, het is de enige manier om te weten dat de test nog meet wat hij beweert.
    */
   it("makes the second caller wait for the first to commit", async () => {
     await schrijfSessie("token-een");
@@ -138,7 +149,7 @@ describe("session-store", () => {
     });
 
     const b = (async () => {
-      await wacht(100);
+      await wacht(250);
       return vernieuwOnderSlot(async (huidige) => {
         gebeurtenissen.push("b-start");
         await wacht(50);
