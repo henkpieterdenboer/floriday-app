@@ -1,6 +1,6 @@
 # Design system
 
-Bijgewerkt: 3 augustus 2026.
+Bijgewerkt: 6 augustus 2026.
 
 Deze app haalt gedeelde onderdelen uit het Coloriginz design system, een shadcn custom
 registry. Onderdelen komen als **broncode** binnen: er is geen npm-pakket en geen
@@ -18,6 +18,7 @@ Registry: `https://design-system.apps.coloriginz.com/r/{name}.json`, gekoppeld i
 | `@col/brand-logo` | 1.1.0 | Het Coloriginz-logo in de kaartheader |
 | `@col/sso-button` | 1.0.0 | De Microsoft-knop op de inlogpagina |
 | `@col/brand-assets` | 1.0.0 | Script dat de foto's en logo's naar `public/brand/` haalt |
+| `@col/email-shell` | 1.0.0 | De uitnodigingsmail (zie "De uitnodigingsmail") |
 
 Installeren of bijwerken:
 
@@ -218,6 +219,50 @@ apart component is en geen stukje van `LoginForm`.
 Dit kost wel wat: de knop werkte eerder ook zonder JavaScript, want hij was een gewone
 submit-knop. Nu niet meer. Voor een interne app met een aanmeldscherm dat toch al op React
 draait weegt dat niet op tegen een eigen namaakknop naast de beheerde versie.
+
+## De uitnodigingsmail
+
+Sinds 6 augustus 2026 wordt de enige mail die deze app verstuurt gebouwd met
+`@col/email-shell`. Daarvoor was het een handgeschreven HTML-string met een groene knop en
+zonder logo.
+
+`buildEmail` neemt een lijst blokken en levert HTML én platte tekst uit dezelfde bron. Dat
+lost twee dingen op die in de oude versie stuk waren: de naam van de ontvanger werd
+ongefilterd in de HTML gezet, en tekst en HTML moesten bij elke wijziging apart bijgewerkt
+worden. De blokken staan in `src/features/auth/emails/invitation.ts`, het merk in `brand.ts`
+ernaast.
+
+**Het item verstuurt niets.** `buildEmail` geeft een `Mail` terug; `src/lib/mail.ts` blijft
+verantwoordelijk voor het transport. Die geeft `mail.attachments` door aan nodemailer —
+zonder die regel toont de mail een gebroken afbeelding, ook al staat de CID-verwijzing keurig
+in de HTML.
+
+Het logo staat als base64-constante in `src/features/auth/emails/logo-base64.ts`, niet in
+`public/`. Vercel serverless functions kunnen `public/` niet betrouwbaar van de schijf lezen:
+`fs.readFileSync` op verzendmoment geeft op productie een mail zonder logo, en dat zie je
+lokaal noch in de tests. Opnieuw genereren na een wijziging in de merkassets:
+
+```bash
+node scripts/pull-brand-assets.mjs
+npm run email-logo
+git diff src/features/auth/emails/logo-base64.ts
+```
+
+De knopkleur is `#006799` (COLORIGINZ brand-700 uit `@col/brand-tokens`) en niet brand-500:
+wit op brand-500 haalt met 3,2:1 de 4,5:1 van WCAG AA niet. Het streepje bovenaan draagt geen
+tekst en houdt wél brand-500 (`#0098da`).
+
+Hoe de mail er echt uitziet, is niet uit de code af te leiden — de VML-knop bestaat juist
+omdat Outlook zich anders gedraagt dan de rest:
+
+```bash
+npm run testmail    # schrijft tmp/uitnodiging.eml
+```
+
+Dubbelklikken opent hem in Outlook desktop of Apple Mail. Gmail importeert geen losse
+`.eml`; die controle vraagt een echte verzending via `npm run invite`. Stand van zaken:
+Outlook desktop is gecontroleerd (in het design system, 6 augustus 2026), Gmail en Apple Mail
+in donkere modus nog niet.
 
 ## Wat het meebracht
 

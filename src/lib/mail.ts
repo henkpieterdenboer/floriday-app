@@ -8,12 +8,12 @@ import {
   resolveMailRouting,
 } from "@/features/environment/demo-mail-routing";
 
-export interface Mail {
-  to: string;
-  subject: string;
-  text: string;
-  html: string;
-}
+/**
+ * De vorm die @col/email-shell teruggeeft. Bewust dat type en geen eigen kopie: het item is
+ * er destijds op gebouwd, dus een tweede definitie zou alleen maar uit de pas kunnen lopen.
+ */
+import type { Mail } from "@/components/email/email-types";
+export type { Mail };
 
 /**
  * Twee mogelijke transporters (SMTP/Resend en Ethereal), elk apart gecachet. Met een vaste
@@ -97,6 +97,9 @@ export async function sendMail(mail: Mail): Promise<string | null> {
     subject: routing.subject,
     text: mail.text,
     html: mail.html,
+    // Het logo reist mee als CID-bijlage; zonder deze regel toont de mail een gebroken
+    // afbeelding, ook al staat de verwijzing keurig in de HTML.
+    attachments: mail.attachments,
   });
 
   const preview = nodemailer.getTestMessageUrl(info);

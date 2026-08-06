@@ -20,3 +20,6 @@ next-env.d.ts
 
 # Data-exports: momentopnames van het archief, horen niet in git
 /export/
+
+# Testmails van `npm run testmail`
+/tmp/

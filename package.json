@@ -19,7 +19,9 @@
     "invite": "tsx scripts/invite.ts",
     "export-aanbod": "tsx scripts/export-aanbod.ts",
     "delta": "tsx scripts/delta-sync.ts",
-    "toon-afgekeurd": "tsx scripts/toon-afgekeurde-records.ts"
+    "toon-afgekeurd": "tsx scripts/toon-afgekeurde-records.ts",
+    "testmail": "tsx scripts/testmail.ts",
+    "email-logo": "node scripts/genereer-email-logo.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
