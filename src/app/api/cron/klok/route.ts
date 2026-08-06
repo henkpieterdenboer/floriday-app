@@ -41,12 +41,17 @@ export async function GET(request: Request): Promise<NextResponse> {
       snedenVerwerkt: result.snedenVerwerkt,
       rowsProcessed: result.rowsProcessed,
       versionsAdded: result.versionsAdded,
-      // Alleen welke snede (dag/locatie), niet waarom. De reden - totaal-bereikt versus
-      // korte-pagina versus maxPaginas - zit in SyncRun.warning, niet in dit resultaat; zie
-      // het rapport bij taak 15 voor de afweging om dat hier niet bij te verzinnen.
-      onvolledigeSneden: result.onvolledigeSneden.map(
-        (s) => `${s.auctionDate}/${s.auctionLocationKey}`,
-      ),
+      pagesProcessed: result.pagesProcessed,
+      // Dag, locatie én de reden - "korte-pagina" (de resultatenset schoof onder ons vandaan,
+      // onschuldig) versus "maxPaginas" (de server bereikt zijn eigen totaal nooit, wel iets om
+      // naar te kijken). Zonder de reden kan een lezer van dit antwoord alleen zien wélke snede
+      // onvolledig was, niet of dat om aandacht vraagt - daarvoor moest hij eerst de SyncRun-rij
+      // zelf opzoeken.
+      onvolledigeSneden: result.onvolledigeSneden.map((s) => ({
+        auctionDate: s.auctionDate,
+        auctionLocationKey: s.auctionLocationKey,
+        stopReden: s.stopReden,
+      })),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

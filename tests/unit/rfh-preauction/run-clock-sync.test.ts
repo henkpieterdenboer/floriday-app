@@ -50,6 +50,7 @@ describe("runClockSyncWith", () => {
     expect(syncSnede).toHaveBeenCalledTimes(28);
     expect(uit.rowsProcessed).toBe(280);
     expect(uit.versionsAdded).toBe(56);
+    expect(uit.pagesProcessed).toBe(56);
     expect(uit.onvolledigeSneden).toEqual([]);
     expect(finishRun).toHaveBeenCalledWith(
       1n,
@@ -81,6 +82,13 @@ describe("runClockSyncWith", () => {
     const uit = await runClockSyncWith({ trigger: "CRON" }, deps);
 
     expect(uit.onvolledigeSneden).toHaveLength(4);
+    // Elke onvolledige snede draagt zijn eigen reden, niet alleen dag en locatie - dat is
+    // precies wat het cron-antwoord nodig heeft om zonder de SyncRun-rij te laten zien of het
+    // om een onschuldige verschuiving gaat of om een server die zijn eigen totaal nooit haalt.
+    for (const snede of uit.onvolledigeSneden) {
+      expect(snede.auctionLocationKey).toBe("NAALDWIJK");
+      expect(snede.stopReden).toBe("maxPaginas");
+    }
     const outcome = finishRun.mock.calls[0][1];
     expect(outcome.status).toBe("SUCCEEDED");
     expect(outcome.warning).toMatch(/NAALDWIJK/);

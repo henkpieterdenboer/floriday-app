@@ -6,6 +6,7 @@ vi.mock("@/features/rfh-preauction/sync/run-clock-sync", () => ({
     snedenVerwerkt: 28,
     rowsProcessed: 12000,
     versionsAdded: 340,
+    pagesProcessed: 33,
     onvolledigeSneden: [],
   })),
 }));
@@ -54,7 +55,35 @@ describe("GET /api/cron/klok", () => {
   it("runs the sync and reports the totals", async () => {
     const res = await GET(verzoek("Bearer geheim"));
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ rowsProcessed: 12000, onvolledigeSneden: [] });
+    expect(await res.json()).toMatchObject({
+      rowsProcessed: 12000,
+      pagesProcessed: 33,
+      onvolledigeSneden: [],
+    });
+  });
+
+  // Het punt van deze wijziging: een lezer van het cron-antwoord moet kunnen zien waarom een
+  // snede onvolledig was zonder eerst de SyncRun-rij op te zoeken. "korte-pagina" en
+  // "maxPaginas" zijn geen technische details maar twee verschillende diagnoses.
+  it("names the reason a slice was incomplete in the response", async () => {
+    vi.mocked(runClockSync).mockResolvedValueOnce({
+      snedenVerwerkt: 28,
+      rowsProcessed: 11500,
+      versionsAdded: 300,
+      pagesProcessed: 40,
+      onvolledigeSneden: [
+        { auctionDate: "20260806", auctionLocationKey: "NAALDWIJK", stopReden: "maxPaginas" },
+      ],
+    });
+
+    const res = await GET(verzoek("Bearer geheim"));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      onvolledigeSneden: [
+        { auctionDate: "20260806", auctionLocationKey: "NAALDWIJK", stopReden: "maxPaginas" },
+      ],
+    });
   });
 
   it("skips when a run is already going", async () => {

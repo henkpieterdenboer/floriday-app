@@ -3,7 +3,7 @@ import { createPreauctionClient } from "@/features/rfh-preauction/client";
 import { finishRun, startRun } from "@/features/floriday/sync/run-log";
 import { snedenVoor, type Snede } from "@/features/rfh-preauction/sync/sneden";
 import { veildagenVoorRun } from "@/features/rfh-preauction/sync/veildagen";
-import { syncSnede, type SyncSnedeResult } from "@/features/rfh-preauction/sync/clock-supply";
+import { syncSnede, type SnedeStopReden, type SyncSnedeResult } from "@/features/rfh-preauction/sync/clock-supply";
 import { writeClockPage } from "@/features/rfh-preauction/sync/write-clock-page";
 
 /** The resource name in SyncRun. Distinct from SUPPLY_RESOURCE so the status page can tell them apart. */
@@ -16,11 +16,25 @@ export interface RunClockSyncOptions {
   onProgress?: (message: string) => void;
 }
 
+/**
+ * An incomplete slice plus why it stopped short - see SnedeStopReden in clock-supply.ts for
+ * what the three reasons mean. Carrying the reason here, not just the slice, is the point:
+ * without it a caller (the cron route) can only say *which* slice was incomplete, not whether
+ * that is a shifting result set (unremarkable) or the server never reaching its own total
+ * (worth looking at). SyncRun.warning already spells this out for whoever reads the database
+ * row; this is the same information for whoever only reads the cron response.
+ */
+export interface OnvolledigeSnede extends Snede {
+  stopReden: SnedeStopReden;
+}
+
 export interface RunClockSyncResult {
   snedenVerwerkt: number;
   rowsProcessed: number;
   versionsAdded: number;
-  onvolledigeSneden: Snede[];
+  /** Real API pages fetched across every slice. See the field of the same name below for why. */
+  pagesProcessed: number;
+  onvolledigeSneden: OnvolledigeSnede[];
 }
 
 export interface RunClockSyncDeps {
@@ -66,12 +80,10 @@ export async function runClockSyncWith(
   // same thing the Floriday sync counts under that column, or the status page shows two
   // numbers that look comparable but measure different things (spec review, task 14/17).
   let pagesProcessed = 0;
-  const onvolledigeSneden: Snede[] = [];
-  // Per-slice text for the warning, e.g. "20260806/NAALDWIJK (korte-pagina)". compleet=false
-  // covers two different diagnoses - a shifting result set versus a server that never reaches
-  // its own total - and a reader looking at this at 3am needs to see which one it is, not just
-  // that something was incomplete.
-  const onvolledigheidsredenen: string[] = [];
+  // Carries the reason alongside the slice - see OnvolledigeSnede's doc comment for why that
+  // matters. The warning string below is derived from this array rather than tracked
+  // separately, so the two can never disagree about which slices were incomplete or why.
+  const onvolledigeSneden: OnvolledigeSnede[] = [];
 
   try {
     for (const snede of sneden) {
@@ -92,10 +104,7 @@ export async function runClockSyncWith(
       versionsAdded += uit.versionsAdded;
       pagesProcessed += uit.pagesFetched;
       if (!uit.compleet) {
-        onvolledigeSneden.push(snede);
-        onvolledigheidsredenen.push(
-          `${snede.auctionDate}/${snede.auctionLocationKey} (${uit.stopReden})`,
-        );
+        onvolledigeSneden.push({ ...snede, stopReden: uit.stopReden });
       }
 
       options.onProgress?.(
@@ -105,8 +114,10 @@ export async function runClockSyncWith(
     }
 
     const warning =
-      onvolledigheidsredenen.length > 0
-        ? `Onvolledig opgehaald: ${onvolledigheidsredenen.join(", ")}`
+      onvolledigeSneden.length > 0
+        ? `Onvolledig opgehaald: ${onvolledigeSneden
+            .map((s) => `${s.auctionDate}/${s.auctionLocationKey} (${s.stopReden})`)
+            .join(", ")}`
         : undefined;
 
     await deps.finishRun(runId, {
@@ -117,7 +128,13 @@ export async function runClockSyncWith(
       warning,
     });
 
-    return { snedenVerwerkt: sneden.length, rowsProcessed, versionsAdded, onvolledigeSneden };
+    return {
+      snedenVerwerkt: sneden.length,
+      rowsProcessed,
+      versionsAdded,
+      pagesProcessed,
+      onvolledigeSneden,
+    };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     try {
