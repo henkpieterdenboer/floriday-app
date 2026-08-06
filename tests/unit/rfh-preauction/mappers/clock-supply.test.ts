@@ -117,4 +117,78 @@ describe("toClockSupplyLineRow", () => {
 
     expect(row.clockPresalesSupplyLineId).toBeNull();
   });
+
+  // productCode, organization.relationNumber, packageTypeCode and mainGroupCode are typed
+  // z.union([z.string(), z.number()]) precisely because RFH has been observed to send
+  // numbers for them. Every fixture above uses strings, so without this test the tekst()
+  // helper and the String(...) call on mainGroupCode never actually run their number branch.
+  it("coerces the number-typed union fields to strings", () => {
+    const row = toClockSupplyLineRow(
+      clockSupplyPageSchema.parse({
+        results: [
+          {
+            ...PAYLOAD,
+            productCode: 105127,
+            organization: { ...PAYLOAD.organization, relationNumber: 73100 },
+            packageTypeCode: 577,
+            mainGroupCode: 1,
+          },
+        ],
+        totalDocuments: 1,
+      }).results[0],
+      "20260807",
+    );
+
+    expect(row.productCode).toBe("105127");
+    expect(row.supplierRelationNumber).toBe("73100");
+    expect(row.packageTypeCode).toBe("577");
+    expect(row.mainGroupCode).toBe("1");
+  });
+
+  it("keeps a null presale price as null, not as the string \"null\"", () => {
+    const row = toClockSupplyLineRow(
+      clockSupplyPageSchema.parse({
+        results: [{ ...PAYLOAD, preSalePriceValue: null }],
+        totalDocuments: 1,
+      }).results[0],
+      "20260807",
+    );
+
+    expect(row.preSalePriceValue).toBeNull();
+  });
+
+  // Only the fields the schema actually requires. Everything else is `.nullish()` and
+  // genuinely absent here, not just null - the case a new, not-yet-observed product group
+  // would trigger. This pins down that such a record still satisfies every NOT NULL column
+  // on ClockSupplyLine; the reviewer's column-by-column check proves it once, this test
+  // keeps proving it as the schema moves.
+  it("still produces every NOT NULL column from a bare-minimum payload", () => {
+    const minimal = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      reference: "minimal-1",
+      organization: { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+      name: "MINIMAL",
+      mainGroupCode: "1",
+      currentNumberOfPieces: 10,
+      auctionLocation: "Naaldwijk",
+    };
+
+    const row = toClockSupplyLineRow(
+      clockSupplyPageSchema.parse({ results: [minimal], totalDocuments: 1 }).results[0],
+      "20260807",
+    );
+
+    expect(row.clockSupplyLineId).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    expect(row.reference).toBe("minimal-1");
+    expect(row.auctionDate.toISOString()).toBe("2026-08-07T00:00:00.000Z");
+    expect(row.supplierOrganizationId).toBe("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    expect(row.supplierCertificates).toEqual([]);
+    expect(row.name).toBe("MINIMAL");
+    expect(row.mainGroupCode).toBe("1");
+    expect(row.currentNumberOfPieces).toBe(10);
+    expect(row.auctionLocation).toBe("Naaldwijk");
+    expect(row.isAuctioned).toBe(false);
+    expect(row.isFromSyntheticRequest).toBe(false);
+    expect(row.isSynthetic).toBe(false);
+  });
 });
