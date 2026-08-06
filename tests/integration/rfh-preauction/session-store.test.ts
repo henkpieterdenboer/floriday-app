@@ -21,6 +21,13 @@ import {
  * na afloop teruggezet wordt. De afterEach ruimt op tussen de tests door; de afterAll
  * herstelt de uitgangssituatie.
  *
+ * De beforeAll bewaart niet alleen, hij ruimt ook meteen op. Dat is niet netjesheid maar
+ * noodzaak: de eerste test verwacht dat er géén sessie is. Zolang de testomgeving nog
+ * ongekoppeld was klopte die aanname vanzelf en viel het niet op; zodra `npm run rfh-koppel`
+ * er gedraaid had, vond die test een echte rij en faalde hij. De tests horen niet af te
+ * hangen van of de omgeving toevallig gekoppeld is, dus beginnen ze allemaal op een schone
+ * lei en komt de werkelijkheid aan het eind terug.
+ *
  * De guard in tests/integration/no-real-data-touched.test.ts telt SupplyLine,
  * SupplyLineVersion, TradeItem en Organization. RfhSession komt daar niet in voor, dus die
  * test merkt hier niets van - reden te meer om het hier zelf af te dekken.
@@ -46,6 +53,8 @@ beforeAll(async () => {
       lastError: rij.lastError,
     };
   }
+  // Schone lei voor de eerste test; de afterAll zet hierboven bewaarde rij terug.
+  await prisma.rfhSession.deleteMany({ where: { id: SESSIE_ID } });
 });
 
 afterEach(async () => {
