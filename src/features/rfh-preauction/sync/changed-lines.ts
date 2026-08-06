@@ -85,6 +85,14 @@ const CONTENT_FIELDS = Object.keys(CONTENT_FIELD_SET) as ContentField[];
  */
 function canoniek(waarde: unknown): unknown {
   if (Array.isArray(waarde)) return waarde.map(canoniek);
+  // Object.entries(Date) is empty, so without this guard every Date collapses to {} and two
+  // different dates inside an array would compare equal - silent, unrecoverable data loss of
+  // exactly the kind CONTENT_FIELD_SET's docstring warns about. Unreachable today: everything
+  // that flows through this branch comes from parsed JSON (RFH's response body, or jsonb and
+  // text[] read back from Postgres), and none of that ever contains a real Date. Kept anyway,
+  // because nothing in the types enforces that assumption and it should not have to be
+  // rediscovered a year from now.
+  if (waarde instanceof Date) return waarde.getTime();
   if (waarde !== null && typeof waarde === "object") {
     return Object.fromEntries(
       Object.entries(waarde as Record<string, unknown>)

@@ -113,6 +113,40 @@ describe("selectChangedClockLines", () => {
     expect(selectChangedClockLines([nieuw], bestaand)).toHaveLength(1);
   });
 
+  it("sorts keys at every nesting level, not just the top", () => {
+    const bestaand = new Map([
+      [
+        rij().clockSupplyLineId,
+        rij({ characteristics: [{ a: 1, b: { c: 2, d: { e: 3, f: 4 } } }] }),
+      ],
+    ]);
+    const nieuw = rij({ characteristics: [{ b: { d: { f: 4, e: 3 }, c: 2 }, a: 1 }] });
+
+    expect(selectChangedClockLines([nieuw], bestaand)).toHaveLength(0);
+  });
+
+  it("treats a reversed characteristic order as a change", () => {
+    const bestaand = new Map([
+      [
+        rij().clockSupplyLineId,
+        rij({
+          characteristics: [
+            { vbnCode: "S01", vbnValueCode: "012" },
+            { vbnCode: "S02", vbnValueCode: "013" },
+          ],
+        }),
+      ],
+    ]);
+    const nieuw = rij({
+      characteristics: [
+        { vbnCode: "S02", vbnValueCode: "013" },
+        { vbnCode: "S01", vbnValueCode: "012" },
+      ],
+    });
+
+    expect(selectChangedClockLines([nieuw], bestaand)).toHaveLength(1);
+  });
+
   it("does not treat a dropped presale link as a change", () => {
     const bestaand = new Map([[rij().clockSupplyLineId, rij()]]);
     const nieuw = rij({ clockPresalesSupplyLineId: null });
