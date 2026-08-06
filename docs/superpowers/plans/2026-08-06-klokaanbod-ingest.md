@@ -3019,6 +3019,13 @@ export interface RunClockSyncDeps {
  * resume from - and none is needed, because the next run simply asks for the same days
  * again and upserts over its own work.
  *
+ * **Sequential is a requirement, not a style choice.** http.ts deliberately has no rate
+ * limiter, and the argument for leaving it out is that a run is a few dozen requests
+ * spread over seconds. That argument only holds while slices go one at a time. Fan these
+ * out with Promise.all and the justification evaporates, with nothing left to catch it -
+ * against a partner's undocumented API, on a personal session. If this ever needs to be
+ * faster, add the limiter first.
+ *
  * An incomplete slice is a warning, not a failure. This feed has no max-sequence endpoint,
  * so "did we get everything" can only be answered by comparing against totalDocuments per
  * slice; reporting that comparison is the closest thing to a completeness proof available
@@ -3039,7 +3046,19 @@ export async function runClockSyncWith(
 
   try {
     for (const snede of sneden) {
-      const uit = await deps.syncSnede({ snede });
+      // Verrijk de fout met de snede voordat hij naar boven gaat. postJson kent alleen het
+      // pad, en dat is voor deze API altijd dezelfde literal - twee mislukkingen op
+      // verschillende veildagen leveren anders bijna identieke tekst op in
+      // SyncRun.errorMessage en op de statuspagina.
+      const uit = await deps
+        .syncSnede({ snede })
+        .catch((fout: unknown) => {
+          const bericht = fout instanceof Error ? fout.message : String(fout);
+          throw new Error(
+            `${snede.auctionDate} ${snede.auctionLocationKey}: ${bericht}`,
+            { cause: fout },
+          );
+        });
       rowsProcessed += uit.rowsProcessed;
       versionsAdded += uit.versionsAdded;
       if (!uit.compleet) onvolledigeSneden.push(snede);
