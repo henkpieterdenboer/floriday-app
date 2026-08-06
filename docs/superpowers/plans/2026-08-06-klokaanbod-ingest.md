@@ -2508,8 +2508,27 @@ function dedupe(rows: readonly ClockSupplyLineRow[]): ClockSupplyLineRow[] {
   return [...perId.values()];
 }
 
-const json = (waarde: unknown[] | null): Prisma.InputJsonValue | typeof Prisma.JsonNull =>
-  waarde === null ? Prisma.JsonNull : (waarde as Prisma.InputJsonValue);
+/**
+ * A jsonb value for the raw INSERT. Measured, not assumed.
+ *
+ * Passing the array straight in as a parameter does not work: the driver serialises a JS
+ * array as a Postgres *array* literal - `{...}` - and Postgres answers
+ * `22P02 invalid input syntax for type json`. So the value is stringified by hand and cast
+ * explicitly.
+ *
+ * Prisma.JsonNull and Prisma.DbNull are sentinels the query builder understands; inside
+ * Prisma.sql they mean nothing. Absent is a plain typed NULL.
+ */
+const jsonb = (waarde: unknown[] | null): Prisma.Sql =>
+  waarde === null ? Prisma.sql`NULL::jsonb` : Prisma.sql`${JSON.stringify(waarde)}::jsonb`;
+
+/**
+ * The same value for createMany, where the sentinels do apply - and where the difference
+ * is real. Prisma.JsonNull stores a jsonb `null`; Prisma.DbNull stores SQL NULL. "This lot
+ * has no characteristics" is the second one.
+ */
+const jsonInput = (waarde: unknown[] | null): Prisma.InputJsonValue | typeof Prisma.DbNull =>
+  waarde === null ? Prisma.DbNull : (waarde as Prisma.InputJsonValue);
 
 /**
  * One multi-row INSERT ... ON CONFLICT for the whole slice, for the same reason the Floriday
@@ -2532,10 +2551,10 @@ function upsertSql(rows: readonly ClockSupplyLineRow[], observedAt: Date): Prism
       ${row.clockSupplyLineId}::uuid, ${row.reference}, ${row.auctionDate}::date,
       ${row.clockPresalesSupplyLineId}::uuid,
       ${row.supplierOrganizationId}::uuid, ${row.supplierName}, ${row.supplierRelationNumber},
-      ${row.supplierLogoUrl}, ${row.supplierCertificates},
+      ${row.supplierLogoUrl}, ${row.supplierCertificates}::text[],
       ${row.productCode}, ${row.vbnProductName}, ${row.productName}, ${row.name},
-      ${json(row.characteristics)}, ${json(row.positiveCharacteristics)},
-      ${json(row.negativeCharacteristics)},
+      ${jsonb(row.characteristics)}, ${jsonb(row.positiveCharacteristics)},
+      ${jsonb(row.negativeCharacteristics)},
       ${row.qualityCode}, ${row.qualityIndexClassification}, ${row.mainGroupCode},
       ${row.productGroupName}, ${row.potSizeInCm}, ${row.plantHeightInCm}, ${row.photoUrl},
       ${row.topLevelMainColor}, ${row.rgbMainColor},
@@ -2669,9 +2688,9 @@ export async function writeClockPage(
         await tx.clockSupplyLineVersion.createMany({
           data: changed.map(({ isSynthetic: _isSynthetic, ...row }) => ({
             ...row,
-            characteristics: json(row.characteristics),
-            positiveCharacteristics: json(row.positiveCharacteristics),
-            negativeCharacteristics: json(row.negativeCharacteristics),
+            characteristics: jsonInput(row.characteristics),
+            positiveCharacteristics: jsonInput(row.positiveCharacteristics),
+            negativeCharacteristics: jsonInput(row.negativeCharacteristics),
             observedAt,
           })),
           skipDuplicates: true,
