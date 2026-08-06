@@ -92,6 +92,27 @@ describe("selectChangedClockLines", () => {
       .toHaveLength(1);
   });
 
+  // Zonder canonicalisatie is dit elke vijf minuten een "wijziging", voor elke partij met
+  // kenmerken. Postgres jsonb geeft de sleutels in zijn eigen volgorde terug, niet in die
+  // van RFH.
+  it("ignores key order inside the characteristics", () => {
+    const bestaand = new Map([
+      [rij().clockSupplyLineId, rij({ characteristics: [{ vbnCode: "S01", vbnValueCode: "012" }] })],
+    ]);
+    const nieuw = rij({ characteristics: [{ vbnValueCode: "012", vbnCode: "S01" }] });
+
+    expect(selectChangedClockLines([nieuw], bestaand)).toHaveLength(0);
+  });
+
+  it("still notices a genuinely different characteristic", () => {
+    const bestaand = new Map([
+      [rij().clockSupplyLineId, rij({ characteristics: [{ vbnCode: "S01", vbnValueCode: "012" }] })],
+    ]);
+    const nieuw = rij({ characteristics: [{ vbnCode: "S01", vbnValueCode: "014" }] });
+
+    expect(selectChangedClockLines([nieuw], bestaand)).toHaveLength(1);
+  });
+
   it("does not treat a dropped presale link as a change", () => {
     const bestaand = new Map([[rij().clockSupplyLineId, rij()]]);
     const nieuw = rij({ clockPresalesSupplyLineId: null });

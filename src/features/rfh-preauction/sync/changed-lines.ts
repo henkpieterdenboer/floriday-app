@@ -71,14 +71,39 @@ const CONTENT_FIELD_SET: Record<ContentField, true> = {
 
 const CONTENT_FIELDS = Object.keys(CONTENT_FIELD_SET) as ContentField[];
 
+/**
+ * Sorts object keys, recursively, leaving array order alone.
+ *
+ * The characteristic arrays are stored in Postgres `jsonb`, and jsonb does not preserve
+ * key order inside an object - it stores keys by length, then bytewise. So the copy read
+ * back from the database can stringify differently from the copy that just arrived from
+ * RFH while meaning exactly the same thing. Compared naively that is a changed row on
+ * every run: at 13.000 lots every five minutes, an archive filling up with noise that
+ * records nothing.
+ *
+ * Array order is deliberately left alone. Key order carries no meaning; element order does.
+ */
+function canoniek(waarde: unknown): unknown {
+  if (Array.isArray(waarde)) return waarde.map(canoniek);
+  if (waarde !== null && typeof waarde === "object") {
+    return Object.fromEntries(
+      Object.entries(waarde as Record<string, unknown>)
+        .sort(([links], [rechts]) => (links < rechts ? -1 : links > rechts ? 1 : 0))
+        .map(([sleutel, inhoud]) => [sleutel, canoniek(inhoud)]),
+    );
+  }
+  return waarde;
+}
+
 function isSameValue(left: unknown, right: unknown): boolean {
   if (left instanceof Date && right instanceof Date) {
     return left.getTime() === right.getTime();
   }
   if (Array.isArray(left) && Array.isArray(right)) {
     // Arrays here are certificate lists and characteristic blobs: small, and only ever
-    // compared, never merged. JSON is the cheapest comparison that is actually correct.
-    return JSON.stringify(left) === JSON.stringify(right);
+    // compared, never merged. Canonical JSON is the cheapest comparison that is actually
+    // correct - see canoniek for why plain stringify is not.
+    return JSON.stringify(canoniek(left)) === JSON.stringify(canoniek(right));
   }
   return left === right;
 }
