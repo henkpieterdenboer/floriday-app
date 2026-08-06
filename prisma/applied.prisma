@@ -223,3 +223,169 @@ model AppSetting {
   value     String
   updatedAt DateTime @updatedAt @db.Timestamptz
 }
+
+/// Het volledige klokaanbod voor snijbloemen, opgehaald bij RFH Pre-Auction.
+/// Losstaand van SupplyLine: dat is de voorverkoop, dit is de klok. De koppeling
+/// tussen beide is clockPresalesSupplyLineId, en die is optioneel omdat een vijfde
+/// van het klokaanbod nooit door de voorverkoop komt (spec §3.2).
+model ClockSupplyLine {
+  clockSupplyLineId String   @id @db.Uuid
+  reference         String
+  auctionDate       DateTime @db.Date
+
+  /// Wijst naar SupplyLine.supplyLineId. Geen relatie in Prisma en geen foreign key:
+  /// op productie bestaat onze voorverkoopkant nog niet, en RFH laat deze verwijzing
+  /// los zodra de veildag geweest is (spec §3.7). Een foreign key zou dan schrijven
+  /// blokkeren op precies het moment dat het ertoe doet.
+  clockPresalesSupplyLineId String? @db.Uuid
+
+  supplierOrganizationId String   @db.Uuid
+  supplierName           String?
+  supplierRelationNumber String?
+  supplierLogoUrl        String?
+  supplierCertificates   String[]
+
+  productCode                String?
+  vbnProductName             String?
+  productName                String?
+  name                       String
+  characteristics            Json?
+  positiveCharacteristics    Json?
+  negativeCharacteristics    Json?
+  qualityCode                String?
+  qualityIndexClassification String?
+  /// Altijd "1" zolang de scope snijbloemen is. Bewaard om die aanname te kunnen
+  /// controleren in plaats van hem te moeten geloven.
+  mainGroupCode              String
+  productGroupName           String?
+  potSizeInCm                Int?
+  plantHeightInCm            Int?
+  photoUrl                   String?
+  topLevelMainColor          String?
+  rgbMainColor               String?
+
+  currentNumberOfPieces          Int
+  numberOfPackages               Int?
+  piecesPerPackage               Int?
+  packagesPerLayer               Int?
+  layersPerLoadcarrier           Int?
+  numberOfLoadCarriers           Int?
+  numberOfPackagesPerLoadCarrier Int?
+  packageTypeCode                String?
+  packageTypeName                String?
+  loadCarrierCode                String?
+  sequenceOnLoadCarrier          Int?
+
+  preSaleInitialNumberOfPieces Int?
+  preSaleCurrentNumberOfPieces Int?
+  preSalePriceValue            Decimal? @db.Decimal(12, 4)
+  preSalePriceCurrency         String?  @db.VarChar(3)
+
+  /// Tekst, geen AuctionLocation-enum. De records dragen "Naaldwijk", de filtersleutel
+  /// is "NAALDWIJK" (spec §3.6b). Een enum zou op een nieuwe of anders geschreven
+  /// locatie de hele pagina laten mislukken; hier is doorschrijven het juiste gedrag.
+  auctionLocation              String
+  clockShortName               String?
+  auctioningSequence           Int?
+  isAuctioned                  Boolean  @default(false)
+  digitalAuctionSupplyType     String?
+  deliveryFormBarcode          String?
+  lastCommercialMutationMoment DateTime? @db.Timestamptz
+
+  /// Staat bij alle gemeten records op false. De echte marker voor staging-testdata is
+  /// een reference die met "synth_" begint (spec §3.2). Bewaard om te zien of dat ooit
+  /// verandert.
+  isFromSyntheticRequest Boolean @default(false)
+
+  firstSeenAt DateTime @db.Timestamptz
+  lastSeenAt  DateTime @db.Timestamptz
+
+  versions ClockSupplyLineVersion[]
+
+  @@index([auctionDate, auctionLocation])
+  @@index([clockPresalesSupplyLineId])
+  @@index([supplierOrganizationId])
+  @@index([name])
+}
+
+/// Append-only archief. Krijgt een rij zodra er inhoudelijk iets verandert; nooit
+/// wanneer alleen lastSeenAt opschuift. Zie changed-lines.ts voor wat meetelt.
+model ClockSupplyLineVersion {
+  id                BigInt   @id @default(autoincrement())
+  clockSupplyLineId String   @db.Uuid
+  observedAt        DateTime @db.Timestamptz
+
+  reference                 String
+  auctionDate               DateTime @db.Date
+  clockPresalesSupplyLineId String?  @db.Uuid
+
+  supplierOrganizationId String   @db.Uuid
+  supplierName           String?
+  supplierRelationNumber String?
+  supplierLogoUrl        String?
+  supplierCertificates   String[]
+
+  productCode                String?
+  vbnProductName             String?
+  productName                String?
+  name                       String
+  characteristics            Json?
+  positiveCharacteristics    Json?
+  negativeCharacteristics    Json?
+  qualityCode                String?
+  qualityIndexClassification String?
+  mainGroupCode              String
+  productGroupName           String?
+  potSizeInCm                Int?
+  plantHeightInCm            Int?
+  photoUrl                   String?
+  topLevelMainColor          String?
+  rgbMainColor               String?
+
+  currentNumberOfPieces          Int
+  numberOfPackages               Int?
+  piecesPerPackage               Int?
+  packagesPerLayer               Int?
+  layersPerLoadcarrier           Int?
+  numberOfLoadCarriers           Int?
+  numberOfPackagesPerLoadCarrier Int?
+  packageTypeCode                String?
+  packageTypeName                String?
+  loadCarrierCode                String?
+  sequenceOnLoadCarrier          Int?
+
+  preSaleInitialNumberOfPieces Int?
+  preSaleCurrentNumberOfPieces Int?
+  preSalePriceValue            Decimal? @db.Decimal(12, 4)
+  preSalePriceCurrency         String?  @db.VarChar(3)
+
+  auctionLocation              String
+  clockShortName               String?
+  auctioningSequence           Int?
+  isAuctioned                  Boolean
+  digitalAuctionSupplyType     String?
+  deliveryFormBarcode          String?
+  lastCommercialMutationMoment DateTime? @db.Timestamptz
+  isFromSyntheticRequest       Boolean
+
+  clockSupplyLine ClockSupplyLine @relation(fields: [clockSupplyLineId], references: [clockSupplyLineId])
+
+  /// Geen sequenceNumber om op te ontdubbelen zoals SupplyLineVersion dat heeft; deze
+  /// bron levert er geen. observedAt is per run constant, dus dit voorkomt dat dezelfde
+  /// run twee versies van dezelfde regel wegschrijft.
+  @@unique([clockSupplyLineId, observedAt])
+  @@index([clockSupplyLineId, observedAt])
+}
+
+/// Eén rij. Draagt de refresh token voor RFH Pre-Auction.
+///
+/// In de database en niet in een omgevingsvariabele omdat de token bij elk gebruik
+/// rouleert (spec §4): een cronrun op Vercel kan geen env-var terugschrijven, dus daar
+/// zou de sessie na het eerste gebruik dood zijn.
+model RfhSession {
+  id              String    @id @default("default")
+  refreshToken    String
+  lastRefreshedAt DateTime? @db.Timestamptz
+  lastError       String?
+  updatedAt       DateTime  @updatedAt @db.Timestamptz
+}
