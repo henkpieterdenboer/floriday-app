@@ -448,7 +448,39 @@ Twee aandachtspunten:
 
 Geen van beide blokkeert de bouw.
 
-### 11.1 Komen de onverkochte voorverkooppartijen alsnog op de klok?
+### 11.1 Komen de onverkochte voorverkooppartijen alsnog op de klok? — gemeten, en de vraag blijkt niet zo te beantwoorden
+
+**Gemeten op 7 augustus 2026, de ochtend van de veildag, met `npm run meet-klokovergang`.**
+
+| Veildag 07-08-2026 | Avond ervóór (6 aug, ~19:00) | Ochtend van de veildag |
+|---|---|---|
+| Echte klokregels | 165 | **315** |
+| Waarvan met `clockPresalesSupplyLineId` | 156 | **0** |
+
+Onze 370 voorverkoopregels voor die dag lossen op nul klokregels op. Niet omdat ze er niet
+staan, maar omdat de sleutel weg is.
+
+**Daarmee is de vraag zoals hij gesteld was niet te beantwoorden.** Je volgt de overgang via
+de verwijzing, en die bestaat op het moment van meten niet meer. De groei van 165 naar 315
+klokregels over één nacht wijst wel de goede kant op — dat is ongeveer het aantal partijen
+dat onverkocht uit de voorverkoop kwam — maar zonder sleutel is dat samenloop, geen bewijs.
+
+**Wat we wél weten, en dat is belangrijker.** §3.7 stelde dat RFH de link loslaat zodra de
+veildag geweest is. Dat is te ruim: hij is al weg op de **ochtend van de veildag zelf**, vóór
+of tijdens de klok. De avond ervoor was hij er nog, op 156 van de 165 regels.
+
+Gevolg voor de ophaalstrategie: de sync moet de link op de **dag vóór de veildag** vastleggen.
+§6 doet dat al — gisteren, vandaag en twee dagen vooruit — maar de "gisteren"-snede levert
+vrijwel uitsluitend regels zonder koppeling op. Die haalt volume op, geen verbinding.
+
+**Wat er nog wél te meten valt**, en waarvoor de uurlijkse sync moet draaien op een dag met
+echt aanbod: neem twee opnamen van dezelfde veildag, één 's avonds vóór sluiting en één na
+sluiting maar vóór middernacht, en kijk of de klokregels die er in de tweede bij zijn gekomen
+een `clockPresalesSupplyLineId` dragen die matcht met een voorverkoopregel die in de eerste
+opname nog `AVAILABLE` was. Dat is de enige vorm waarin deze vraag zich nog laat beantwoorden,
+en het archief legt precies die twee opnamen vast zodra de sync loopt.
+
+### 11.1b De oorspronkelijke vraagstelling, voor de volledigheid
 
 De 79 `UNAVAILABLE`-regels mét stuks uit §3.4 zouden er de volgende ochtend moeten staan.
 Sinds §3.7 is dit een tweezijdige vraag, want er zijn nu twee uitkomsten die allebei iets

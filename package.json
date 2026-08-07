@@ -24,7 +24,8 @@
     "delta": "tsx scripts/delta-sync.ts",
     "toon-afgekeurd": "tsx scripts/toon-afgekeurde-records.ts",
     "testmail": "tsx scripts/testmail.ts",
-    "email-logo": "node scripts/genereer-email-logo.mjs"
+    "email-logo": "node scripts/genereer-email-logo.mjs",
+    "meet-klokovergang": "tsx scripts/meet-klokovergang.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
