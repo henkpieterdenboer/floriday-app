@@ -35,6 +35,13 @@ De ingest zelf staat: getest, gekoppeld op staging, en heeft via de inhaalslag 5
 klokregels weggeschreven. Wat nog moet gebeuren staat los van bouwen — het is een mensenstap
 en een meting.
 
+Sinds deze wijziging heeft het klokaanbod een eigen schakelaar, `CLOCK_SYNC_ENABLED`, los van
+`SYNC_ENABLED` (dat blijft alléén de Floriday-synchronisatie regelen — zie
+`docs/omgevingen.md`). Dat betekent ook dat `/api/cron/klok` niet langer stilzwijgend meelift
+op `SYNC_ENABLED=false`: zodra deze code op productie staat, probeert de cron gewoon te
+draaien, want `CLOCK_SYNC_ENABLED` staat standaard áán. Stap 3 hieronder houdt hem bewust
+stil totdat de rest klaar is.
+
 - [ ] **Eerst het schema pushen.** `npm run db:push -- --env .env.lokaal-productie`, en dit
       moet gebeuren **vóórdat** de deploy met de klokaanbod-code landt — dezelfde reden als
       het AppSetting-incident van 5 augustus 2026 (zie de kop van `scripts/db-push.mjs`).
@@ -47,19 +54,26 @@ en een meting.
       in. Zonder deze drie gooit `createPreauctionClient()` een fout **vóórdat** `startRun()`
       ooit wordt aangeroepen — er verschijnt dan geen `SyncRun`-rij, alleen een kale 500 vanaf
       de cron-route, onzichtbaar op de statuspagina.
+- [ ] **Zolang de bovenstaande twee stappen niet allebei klaar zijn: `CLOCK_SYNC_ENABLED=false`
+      zetten in Vercel (Production).** Dit moet **vóór** deze code live gaat, om dezelfde reden
+      als hierboven: de variabele bestaat nog niet in `.env.vercel-production`, dus staat hij
+      bij het mergen automatisch "aan". Zonder deze stap probeert `/api/cron/klok` elke vijf
+      minuten te draaien terwijl het schema of de variabelen er nog niet zijn — de kale 500
+      uit de vorige stap, alleen dan iedere vijf minuten in plaats van eenmalig.
 - [ ] **Op productie koppelen.** Vereist een mens die inlogt op
       `https://pre-auction.royalfloraholland.com` in een **privévenster** en de refresh token
       overneemt uit `localStorage` — zie de kop van `scripts/rfh-koppel.ts` voor de precieze
       stappen. Dit kan niet door een agent gedaan worden: de token is maar één keer zichtbaar
       en aan een browsersessie gebonden. Daarna:
       `npm run rfh-koppel -- --env .env.lokaal-productie --token <token>`.
-- [ ] **De cron staat al klaar, maar doet nog niets.** `/api/cron/klok` staat in `vercel.json`
-      op elke 5 minuten en draait al mee in elke productiedeploy. Zodra de twee stappen
-      hierboven staan (schema gepusht, de drie variabelen gezet in Vercel) maar de koppeling
-      er nog niet is, faalt elke run met een leesbare fout (`SyncRun.status = FAILED`,
-      `errorMessage` verwijst naar `rfh-koppel`) — geen stille dataverliezen, wel een
-      wachtende taak die niets doet tot de koppeling er is. Staan de drie variabelen er nog
-      niet, dan geldt dat niet: zie de stap erboven.
+- [ ] **Pas dan `CLOCK_SYNC_ENABLED` weghalen (of op `true` zetten) in Vercel (Production).**
+      `/api/cron/klok` staat al in `vercel.json` op elke 5 minuten en draait al mee in elke
+      productiedeploy; deze stap is wat hem daadwerkelijk laat werken. Dat kan terwijl
+      `SYNC_ENABLED` op `false` blijft staan — de twee schakelaars staan los van elkaar, dat is
+      het hele punt. Vergeet je deze koppeling (de vorige stap) vóór deze stap te doen, dan
+      faalt elke run met een leesbare fout (`SyncRun.status = FAILED`, `errorMessage` verwijst
+      naar `rfh-koppel`) — geen stille dataverliezen, wel een wachtende taak die niets doet tot
+      de koppeling er is.
 - [ ] **De meting uit spec §11.1 afmaken.** Zie
       `docs/superpowers/specs/2026-08-06-rfh-preauction-klokaanbod-design.md`, §11.1. Al
       gemeten: de voorverkooplink wordt losgelaten zodra een veildag voorbij is (nul van 540 op

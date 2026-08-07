@@ -162,6 +162,30 @@ describe("GET /api/cron/sync", () => {
     expect(runSupplySyncMock).not.toHaveBeenCalled();
   });
 
+  // Het hele punt van twee losse schakelaars: de klok-schakelaar mag de Floriday-sync niet
+  // raken. Zonder deze test zou iemand de twee weer aan elkaar kunnen knopen zonder dat er
+  // iets rood wordt - zie tests/unit/api/cron-klok.test.ts voor de spiegelbeeldtest.
+  it("still runs when CLOCK_SYNC_ENABLED (the clock switch) is false", async () => {
+    resetEnvCache();
+    process.env = { ...process.env, ...validEnv, CLOCK_SYNC_ENABLED: "false" };
+    runSupplySyncMock.mockResolvedValue({
+      pagesProcessed: 1,
+      rowsProcessed: 10,
+      versionsAdded: 10,
+      duplicatesCollapsed: 0,
+      tradeItemsAdded: 0,
+      cursor: 5n,
+      reachedEnd: true,
+    });
+
+    const response = await GET(request("Bearer the-real-secret"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.skipped).toBeUndefined();
+    expect(runSupplySyncMock).toHaveBeenCalled();
+  });
+
   it("runs normally when SYNC_ENABLED is absent", async () => {
     resetEnvCache();
     process.env = { ...process.env, ...validEnv };

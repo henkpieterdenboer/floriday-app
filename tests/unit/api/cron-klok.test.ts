@@ -129,6 +129,34 @@ describe("GET /api/cron/klok", () => {
     expect(runClockSync).not.toHaveBeenCalled();
   });
 
+  it("skips the run entirely when CLOCK_SYNC_ENABLED is false", async () => {
+    resetEnvCache();
+    process.env = { ...process.env, ...validEnv, CLOCK_SYNC_ENABLED: "false" };
+
+    const res = await GET(verzoek("Bearer geheim"));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.skipped).toBe(true);
+    expect(body.reason).toMatch(/CLOCK_SYNC_ENABLED/);
+    expect(runClockSync).not.toHaveBeenCalled();
+  });
+
+  // Het hele punt van twee losse schakelaars: de Floriday-schakelaar mag het klokaanbod niet
+  // raken. Zonder deze test zou iemand de twee weer aan elkaar kunnen knopen (bijvoorbeeld
+  // door de klok-route terug op isSyncEnabled() te zetten) zonder dat er iets rood wordt.
+  it("still runs when SYNC_ENABLED (the Floriday switch) is false", async () => {
+    resetEnvCache();
+    process.env = { ...process.env, ...validEnv, SYNC_ENABLED: "false" };
+
+    const res = await GET(verzoek("Bearer geheim"));
+
+    expect(res.status).toBe(200);
+    expect(runClockSync).toHaveBeenCalled();
+    const body = await res.json();
+    expect(body.skipped).toBeUndefined();
+  });
+
   it("returns 500 with the message when the sync throws", async () => {
     vi.mocked(runClockSync).mockRejectedValueOnce(new Error("sessie verlopen"));
     const res = await GET(verzoek("Bearer geheim"));

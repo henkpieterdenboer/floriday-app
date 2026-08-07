@@ -1,6 +1,6 @@
 # Omgevingen, branches en deployment
 
-Bijgewerkt: 2 augustus 2026.
+Bijgewerkt: 7 augustus 2026.
 
 ## De twee databases
 
@@ -91,6 +91,17 @@ Zet deze per omgeving (Production en Preview apart):
 | `APP_URL` | de preview-URL | de productie-URL |
 | `SMTP_*`, `MAIL_FROM` | leeg laten (Ethereal) | Resend |
 | `AZURE_AD_*` | leeg tot Entra er is | idem |
+| `SYNC_ENABLED` | leeg (aan) | `false` tot de Floriday-productiecredentials er zijn |
+| `CLOCK_SYNC_ENABLED` | leeg (aan) | leeg (aan) — onafhankelijk van `SYNC_ENABLED` |
+
+**Twee losse schakelaars, expres.** `SYNC_ENABLED` legt alleen de Floriday-synchronisatie
+stil (`/api/cron/sync`, `/api/cron/organizations`) — die faalt op `invalid_client` zolang de
+Floriday-productiecredentials er niet zijn. `CLOCK_SYNC_ENABLED` legt alleen het klokaanbod
+stil (`/api/cron/klok`, RFH Pre-Auction), en heeft niets met Floriday te maken. Om het
+klokaanbod op productie te laten draaien terwijl Floriday nog stil moet blijven: laat
+`CLOCK_SYNC_ENABLED` leeg (of zet hem op `true`) en laat `SYNC_ENABLED` op `false` staan. Zie
+`docs/openstaand.md` §2 voor de volgorde waarin de rest van het klokaanbod op productie
+klaargezet wordt.
 
 Genereer een geheim met:
 

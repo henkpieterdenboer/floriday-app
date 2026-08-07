@@ -27,10 +27,16 @@ export const envSchema = z.object({
 
   CRON_SECRET: z.string().min(1),
 
-  // Zet op "false" om de uurlijkse synchronisatie stil te leggen. Bedoeld voor een omgeving
-  // die nog wacht op Floriday-gegevens: die hoort niet elk uur te falen alsof er iets kapot
-  // is. Afwezig of iets anders dan "false" betekent aan.
+  // Zet op "false" om de uurlijkse Floriday-synchronisatie stil te leggen. Bedoeld voor een
+  // omgeving die nog wacht op Floriday-gegevens: die hoort niet elk uur te falen alsof er
+  // iets kapot is. Afwezig of iets anders dan "false" betekent aan. Regelt alleen Floriday
+  // (clock-presales-supply, organisaties) - niet het klokaanbod, zie CLOCK_SYNC_ENABLED.
   SYNC_ENABLED: z.string().optional(),
+
+  // Zelfde soort schakelaar als SYNC_ENABLED hierboven, maar voor het klokaanbod
+  // (RFH Pre-Auction) apart: die bron heeft niets aan Floriday-credentials en hoort dus niet
+  // vast te zitten aan de Floriday-schakelaar. Afwezig of iets anders dan "false" betekent aan.
+  CLOCK_SYNC_ENABLED: z.string().optional(),
 
   APP_URL: z.string().url(),
 

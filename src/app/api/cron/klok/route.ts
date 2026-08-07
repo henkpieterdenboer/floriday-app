@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { KLOK_RESOURCE, runClockSync } from "@/features/rfh-preauction/sync/run-clock-sync";
-import { SYNC_DISABLED_MESSAGE, isSyncEnabled } from "@/features/floriday/sync-enabled";
+import { CLOCK_SYNC_DISABLED_MESSAGE, isClockSyncEnabled } from "@/features/rfh-preauction/sync-enabled";
 import { isErEenRunBezig } from "@/features/floriday/sync/run-log";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +24,8 @@ export async function GET(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (!isSyncEnabled()) {
-      return NextResponse.json({ skipped: true, reason: SYNC_DISABLED_MESSAGE });
+    if (!isClockSyncEnabled()) {
+      return NextResponse.json({ skipped: true, reason: CLOCK_SYNC_DISABLED_MESSAGE });
     }
 
     if (await isErEenRunBezig(KLOK_RESOURCE)) {
